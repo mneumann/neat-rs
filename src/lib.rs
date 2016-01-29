@@ -52,7 +52,7 @@ struct Coefficients {
 
 fn genes_compatibility<T: Gene>(genes1: &BTreeMap<Innovation, T>,
                                 genes2: &BTreeMap<Innovation, T>,
-                                c: &Coefficients)
+                                coeff: &Coefficients)
                                 -> f64 {
     let max_len = cmp::max(genes1.len(), genes2.len());
     assert!(max_len > 0);
@@ -94,8 +94,9 @@ fn genes_compatibility<T: Gene>(genes1: &BTreeMap<Innovation, T>,
 
     assert!(2 * matching + disjoint + excess == genes1.len() + genes2.len());
 
-    c.excess * (excess as f64) / (max_len as f64) +
-    c.disjoint * (disjoint as f64) / (max_len as f64) +
+    coeff.excess * (excess as f64) / (max_len as f64) +
+    coeff.disjoint * (disjoint as f64) / (max_len as f64) +
+    coeff.weight *
     if matching > 0 {
         weight_dist / (matching as f64)
     } else {
