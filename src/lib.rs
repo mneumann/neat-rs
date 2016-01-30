@@ -215,13 +215,13 @@ fn crossover<T: Clone, R: Rng>(parent1: &BTreeMap<Innovation, T>,
 type Fitness = f64;
 
 // A niche can never be empty!
-struct Niche<'a> {
-    genomes: Vec<(Fitness, &'a Genome)>,
+struct Niche {
+    genomes: Vec<(Fitness, Box<Genome>)>,
     fitness_sum: Fitness,
 }
 
-impl<'a> Niche<'a> {
-    fn new_with(fitness: Fitness, genome: &'a Genome) -> Niche<'a> {
+impl Niche {
+    fn new_with(fitness: Fitness, genome: Box<Genome>) -> Niche {
         Niche {
             genomes: vec![(fitness, genome)],
             fitness_sum: fitness,
@@ -233,7 +233,7 @@ impl<'a> Niche<'a> {
         self.fitness_sum / (self.genomes.len() as Fitness)
     }
 
-    fn add(&mut self, fitness: Fitness, genome: &'a Genome) {
+    fn add(&mut self, fitness: Fitness, genome: Box<Genome>) {
         assert!(self.genomes.len() > 0);
         self.genomes.push((fitness, genome));
         self.fitness_sum += fitness;
@@ -252,33 +252,33 @@ impl Population {
     //    - determine the elitist size. those are always copied into the new generation.
     //    - r% of the best genomes produce offspring
     //
-    fn produce_offspring(&self) {}
+    fn produce_offspring(self) {}
 
-    // Sort the whole population into niches
-    fn sort_into_niches<'a, R: Rng>(&'a self,
-                                    rng: &mut R,
-                                    threshold: f64,
-                                    coeff: &CompatibilityCoefficients)
-                                    -> Vec<Niche<'a>> {
+    // Partitions the whole population into species (niches)
+    fn partition<R: Rng>(self,
+                         rng: &mut R,
+                         threshold: f64,
+                         coeff: &CompatibilityCoefficients)
+                         -> Vec<Niche> {
         let mut niches: Vec<Niche> = Vec::new();
 
-        'outer: for &(fitness, ref genome) in self.genomes.iter() {
+        'outer: for (fitness, genome) in self.genomes.into_iter() {
             for niche in niches.iter_mut() {
                 // Is this genome compatible with this niche? Test against a random genome.
                 let compatible = match rng.choose(&niche.genomes) {
-                    Some(&(_, probe)) => {
+                    Some(&(_, ref probe)) => {
                         compatibility(&probe.link_genes, &genome.link_genes, coeff) < threshold
                     }
                     // If a niche is empty, a genome always is compatible
                     None => true,
                 };
                 if compatible {
-                    niche.add(fitness, &*genome);
+                    niche.add(fitness, genome);
                     continue 'outer;
                 }
             }
             // if no compatible niche was found, insert into a new niche.
-            niches.push(Niche::new_with(fitness, &*genome));
+            niches.push(Niche::new_with(fitness, genome));
         }
 
         niches
