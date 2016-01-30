@@ -263,11 +263,15 @@ impl Niche {
     }
 }
 
-struct Population {
+struct RatedPopulation {
     genomes: Vec<(Fitness, Box<Genome>)>,
 }
 
-impl Population {
+struct UnratedPopulation {
+    genomes: Vec<Box<Genome>>,
+}
+
+impl RatedPopulation {
     fn len(&self) -> usize {
         self.genomes.len()
     }
@@ -293,7 +297,7 @@ impl Population {
                             tournament_k: usize,
                             rng: &mut R,
                             threshold: f64,
-                            coeff: &CompatibilityCoefficients)
+                            coeff: &CompatibilityCoefficients) -> (RatedPopulation, UnratedPopulation)
         where R: Rng
     {
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
@@ -351,6 +355,10 @@ impl Population {
             // now copy the elites
             new_rated_population.extend(sorted_niche.genomes.into_iter().take(elite_size));
         }
+
+
+        (RatedPopulation{genomes: new_rated_population},
+         UnratedPopulation{genomes: new_unrated_population})
     }
 
     // Partitions the whole population into species (niches)
