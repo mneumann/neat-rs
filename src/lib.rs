@@ -163,11 +163,11 @@ fn is_probable<R: Rng>(prob: &Closed01<f32>, rng: &mut R) -> bool {
 /// We assume ```parent1``` to be the fitter parent. Takes gene 
 /// either from ```parent1``` or ```parent2``` according to
 /// the probabilities specified and the relative fitness of the parents.
-fn crossover<T: Gene, R: Rng>(parent1: &BTreeMap<Innovation, T>,
-                              parent2: &BTreeMap<Innovation, T>,
-                              p: &CrossoverProbabilities,
-                              rng: &mut R)
-                              -> BTreeMap<Innovation, T> {
+fn crossover<T: Clone, R: Rng>(parent1: &BTreeMap<Innovation, T>,
+                               parent2: &BTreeMap<Innovation, T>,
+                               p: &CrossoverProbabilities,
+                               rng: &mut R)
+                               -> BTreeMap<Innovation, T> {
 
     let mut offspring = BTreeMap::new();
 
@@ -210,4 +210,77 @@ fn crossover<T: Gene, R: Rng>(parent1: &BTreeMap<Innovation, T>,
               });
 
     offspring
+}
+
+type Fitness = f64;
+
+// A niche can never be empty!
+struct Niche<'a> {
+    genomes: Vec<(Fitness, &'a Genome)>,
+    fitness_sum: Fitness,
+}
+
+impl<'a> Niche<'a> {
+    fn new_with(fitness: Fitness, genome: &'a Genome) -> Niche<'a> {
+        Niche {
+            genomes: vec![(fitness, genome)],
+            fitness_sum: fitness,
+        }
+    }
+
+    fn mean_fitness(&self) -> Fitness {
+        assert!(self.genomes.len() > 0);
+        self.fitness_sum / (self.genomes.len() as Fitness)
+    }
+
+    fn add(&mut self, fitness: Fitness, genome: &'a Genome) {
+        assert!(self.genomes.len() > 0);
+        self.genomes.push((fitness, genome));
+        self.fitness_sum += fitness;
+    }
+}
+
+struct Population {
+    genomes: Vec<(Fitness, Box<Genome>)>,
+}
+
+impl Population {
+    // 1. sort whole popluation into niches
+    // 2. calculate the number of offspring for each niche.
+    // 3. each niche produces offspring.
+    //    - sort each niche according to the fitness value.
+    //    - determine the elitist size. those are always copied into the new generation.
+    //    - r% of the best genomes produce offspring
+    //
+    fn produce_offspring(&self) {}
+
+    // Sort the whole population into niches
+    fn sort_into_niches<'a, R: Rng>(&'a self,
+                                    rng: &mut R,
+                                    threshold: f64,
+                                    coeff: &CompatibilityCoefficients)
+                                    -> Vec<Niche<'a>> {
+        let mut niches: Vec<Niche> = Vec::new();
+
+        'outer: for &(fitness, ref genome) in self.genomes.iter() {
+            for niche in niches.iter_mut() {
+                // Is this genome compatible with this niche? Test against a random genome.
+                let compatible = match rng.choose(&niche.genomes) {
+                    Some(&(_, probe)) => {
+                        compatibility(&probe.link_genes, &genome.link_genes, coeff) < threshold
+                    }
+                    // If a niche is empty, a genome always is compatible
+                    None => true,
+                };
+                if compatible {
+                    niche.add(fitness, &*genome);
+                    continue 'outer;
+                }
+            }
+            // if no compatible niche was found, insert into a new niche.
+            niches.push(Niche::new_with(fitness, &*genome));
+        }
+
+        niches
+    }
 }
