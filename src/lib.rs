@@ -91,9 +91,9 @@ struct CompatibilityCoefficients {
 
 /// Calculates the compatibility between two gene lists.
 fn compatibility<T: Gene>(genes1: &BTreeMap<Innovation, T>,
-                              genes2: &BTreeMap<Innovation, T>,
-                              coeff: &CompatibilityCoefficients)
-                              -> f64 {
+                          genes2: &BTreeMap<Innovation, T>,
+                          coeff: &CompatibilityCoefficients)
+                          -> f64 {
     let max_len = cmp::max(genes1.len(), genes2.len());
     assert!(max_len > 0);
 
