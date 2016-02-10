@@ -7,12 +7,14 @@ use innovation::{Innovation, InnovationContainer};
 use alignment::Alignment;
 use rand::{Rng, Closed01};
 use compatibility::{Compatibility, WeightedCompatibility};
+use mate::Mate;
 
 mod innovation;
 mod selection;
 mod alignment;
 mod compatibility;
 mod crossover;
+mod mate;
 
 pub trait Gene: Clone {
     fn weight_distance(&self, other: &Self) -> f64;
@@ -121,21 +123,23 @@ impl RatedPopulation {
     //    - determine the elitist size. those are always copied into the new generation.
     //    - r% of the best genomes produce offspring
     //
-    fn produce_offspring<R, C>(self,
-                               pop_size: usize,
-                               // how many of the best individuals of a niche are copied as-is into the
-                               // new population?
-                               elite_percentage: Closed01<f64>,
-                               // how many of the best individuals of a niche are selected for
-                               // reproduction?
-                               selection_percentage: Closed01<f64>,
-                               tournament_k: usize,
-                               rng: &mut R,
-                               threshold: f64,
-                               compatibility: &C)
-                               -> (RatedPopulation, UnratedPopulation)
+    fn produce_offspring<R, C, M>(self,
+                                  pop_size: usize,
+                                  // how many of the best individuals of a niche are copied as-is into the
+                                  // new population?
+                                  elite_percentage: Closed01<f64>,
+                                  // how many of the best individuals of a niche are selected for
+                                  // reproduction?
+                                  selection_percentage: Closed01<f64>,
+                                  tournament_k: usize,
+                                  rng: &mut R,
+                                  threshold: f64,
+                                  compatibility: &C,
+                                  mate: &M)
+                                  -> (RatedPopulation, UnratedPopulation)
         where R: Rng,
-              C: Compatibility
+              C: Compatibility,
+              M: Mate
     {
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
         assert!(self.len() > 0);
@@ -147,7 +151,7 @@ impl RatedPopulation {
         let mut new_unrated_population = Vec::new();
         let mut new_rated_population = Vec::new();
 
-        for mut niche in niches.into_iter() {
+        for niche in niches.into_iter() {
             // calculate new size of niche, and size of elites, and selection size.
             let percentage_of_population: f64 = niche.mean_fitness() / total_mean;
             assert!(percentage_of_population >= 0.0 && percentage_of_population <= 1.0);
@@ -182,9 +186,12 @@ impl RatedPopulation {
                                                                        },
                                                                        select_size,
                                                                        tournament_k);
-                    let offspring = sorted_niche.genomes[parent1].1.clone();
-                    // XXX: mate(parent1, parent2)
-                    new_unrated_population.push(offspring);
+
+                    let offspring = mate.mate(&sorted_niche.genomes[parent1].1,
+                                              &sorted_niche.genomes[parent2].1,
+                                              rng);
+                    // let offspring = sorted_niche.genomes[parent1].1.clone();
+                    new_unrated_population.push(Box::new(offspring));
                     n -= 1;
                 }
             }
