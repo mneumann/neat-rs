@@ -1,24 +1,24 @@
 use super::innovation::{Innovation, InnovationContainer};
-use super::traits::Distance;
+use super::traits::{Distance, Genotype};
 use super::alignment::Alignment;
 use std::cmp;
 
-#[derive(Copy, Clone)]
-enum NodeType {
+#[derive(Debug, Copy, Clone)]
+pub enum NodeType {
     Input,
     Output,
     Hidden,
 }
 
-#[derive(Clone)]
-struct NodeGene {
-    node_type: NodeType,
+#[derive(Debug, Clone)]
+pub struct NodeGene {
+    pub node_type: NodeType,
 }
 
 // To avoid node collisions we use Innovation numbers instead of node
 // ids.
-#[derive(Clone)]
-struct LinkGene {
+#[derive(Debug, Clone)]
+pub struct LinkGene {
     // This points to the NodeGene of that innovation
     source_node_gene: Innovation,
     // This points to the NodeGene of that innovation
@@ -27,11 +27,13 @@ struct LinkGene {
     active: bool,
 }
 
-#[derive(Clone)]
-struct Genome {
-    link_genes: InnovationContainer<LinkGene>,
-    node_genes: InnovationContainer<NodeGene>,
+#[derive(Debug, Clone)]
+pub struct NetworkGenome {
+    pub link_genes: InnovationContainer<LinkGene>,
+    pub node_genes: InnovationContainer<NodeGene>,
 }
+
+impl Genotype for NetworkGenome {}
 
 struct LinkGeneWeightDistance;
 
@@ -91,12 +93,12 @@ impl Distance<InnovationContainer<LinkGene>> for LinkGeneListDistance {
     }
 }
 
-pub struct GenomeDistance {
+pub struct NetworkGenomeDistance {
     pub l: LinkGeneListDistance,
 }
 
-impl Distance<Genome> for GenomeDistance {
-    fn distance(&self, genome_left: &Genome, genome_right: &Genome) -> f64 {
+impl Distance<NetworkGenome> for NetworkGenomeDistance {
+    fn distance(&self, genome_left: &NetworkGenome, genome_right: &NetworkGenome) -> f64 {
         self.l.distance(&genome_left.link_genes, &genome_right.link_genes)
     }
 }

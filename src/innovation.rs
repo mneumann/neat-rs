@@ -12,6 +12,19 @@ pub struct InnovationContainer<T> {
     map: BTreeMap<Innovation, T>,
 }
 
+impl Iterator for Innovation {
+    type Item = Innovation;
+    fn next(&mut self) -> Option<Innovation> {
+        match self.0.checked_add(1) {
+            Some(n) => {
+                self.0 = n;
+                Some(Innovation(n))
+            }
+            None => None,
+        }
+    }
+}
+
 impl Innovation {
     pub fn new(n: usize) -> Innovation {
         Innovation(n)
@@ -42,6 +55,8 @@ impl<T> InnovationContainer<T> {
     }
 
     pub fn insert(&mut self, innov: Innovation, data: T) {
+        // XXX
+        assert!(!self.map.contains_key(&innov));
         self.map.insert(innov, data);
     }
 
@@ -147,4 +162,18 @@ fn test_innovation_alignment() {
     assert_eq!(true, c.get(&Innovation(46)).unwrap().is_disjoint_left());
     assert_eq!(true, c.get(&Innovation(51)).unwrap().is_excess_right());
     assert_eq!(true, c.get(&Innovation(52)).unwrap().is_excess_right());
+}
+
+#[test]
+fn test_innovation_iter() {
+    let mut innovations = Innovation(1);
+    assert_eq!(Innovation(1), innovations);
+    assert_eq!(Some(Innovation(2)), innovations.next());
+    assert_eq!(Some(Innovation(3)), innovations.next());
+    assert_eq!(Some(Innovation(4)), innovations.next());
+    assert_eq!(Some(Innovation(5)), innovations.next());
+
+    let mut innovations = Innovation(usize::max_value() - 1);
+    assert_eq!(Some(Innovation(usize::max_value())), innovations.next());
+    assert_eq!(None, innovations.next());
 }

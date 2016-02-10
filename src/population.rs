@@ -5,6 +5,7 @@ use rand::{Rng, Closed01};
 use super::mate::Mate;
 
 /// A Niche is a subpopulation. It can never be empty! 
+#[derive(Debug)]
 struct Niche<T: Genotype> {
     genomes: Vec<(Fitness, Box<T>)>,
     fitness_sum: Fitness,
@@ -46,12 +47,28 @@ impl<T: Genotype> Niche<T> {
     }
 }
 
+#[derive(Debug)]
 struct RatedPopulation<T: Genotype> {
     genomes: Vec<(Fitness, Box<T>)>,
 }
 
-struct UnratedPopulation<T: Genotype> {
+#[derive(Debug)]
+pub struct UnratedPopulation<T: Genotype> {
     genomes: Vec<Box<T>>,
+}
+
+impl<T: Genotype> UnratedPopulation<T> {
+    pub fn new() -> UnratedPopulation<T> {
+        UnratedPopulation { genomes: Vec::new() }
+    }
+
+    pub fn len(&self) -> usize {
+        self.genomes.len()
+    }
+
+    pub fn add(&mut self, genome: Box<T>) {
+        self.genomes.push(genome);
+    }
 }
 
 impl<T: Genotype> RatedPopulation<T> {
