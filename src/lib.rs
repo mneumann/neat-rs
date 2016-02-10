@@ -6,6 +6,7 @@ use std::cmp;
 use innovation::{Innovation, InnovationContainer};
 use alignment::Alignment;
 use rand::{Rng, Closed01};
+use compatibility::{Compatibility, WeightedCompatibility};
 
 mod innovation;
 mod selection;
@@ -201,24 +202,25 @@ impl RatedPopulation {
     //    - determine the elitist size. those are always copied into the new generation.
     //    - r% of the best genomes produce offspring
     //
-    fn produce_offspring<R>(self,
-                            pop_size: usize,
-                            // how many of the best individuals of a niche are copied as-is into the
-                            // new population?
-                            elite_percentage: Closed01<f64>,
-                            // how many of the best individuals of a niche are selected for
-                            // reproduction?
-                            selection_percentage: Closed01<f64>,
-                            tournament_k: usize,
-                            rng: &mut R,
-                            threshold: f64,
-                            coeff: &compatibility::CompatibilityCoefficients)
-                            -> (RatedPopulation, UnratedPopulation)
-        where R: Rng
+    fn produce_offspring<R, C>(self,
+                               pop_size: usize,
+                               // how many of the best individuals of a niche are copied as-is into the
+                               // new population?
+                               elite_percentage: Closed01<f64>,
+                               // how many of the best individuals of a niche are selected for
+                               // reproduction?
+                               selection_percentage: Closed01<f64>,
+                               tournament_k: usize,
+                               rng: &mut R,
+                               threshold: f64,
+                               compatibility: &C)
+                               -> (RatedPopulation, UnratedPopulation)
+        where R: Rng,
+              C: Compatibility
     {
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
         assert!(self.len() > 0);
-        let niches = self.partition(rng, threshold, coeff);
+        let niches = self.partition(rng, threshold, compatibility);
         assert!(niches.len() > 0);
         let total_mean: Fitness = niches.iter().map(|n| n.mean_fitness()).sum();
         // XXX: total_mean = 0.0?
@@ -278,12 +280,9 @@ impl RatedPopulation {
     }
 
     // Partitions the whole population into species (niches)
-    fn partition<R>(self,
-                    rng: &mut R,
-                    threshold: f64,
-                    coeff: &compatibility::CompatibilityCoefficients)
-                    -> Vec<Niche>
-        where R: Rng
+    fn partition<R, C>(self, rng: &mut R, threshold: f64, compatibility: &C) -> Vec<Niche>
+        where R: Rng,
+              C: Compatibility
     {
         let mut niches: Vec<Niche> = Vec::new();
 
@@ -292,8 +291,7 @@ impl RatedPopulation {
                 // Is this genome compatible with this niche? Test against a random genome.
                 let compatible = match rng.choose(&niche.genomes) {
                     Some(&(_, ref probe)) => {
-                        compatibility::compatibility(&probe.link_genes, &genome.link_genes, coeff) <
-                        threshold
+                        compatibility.between(&probe.link_genes, &genome.link_genes) < threshold
                     }
                     // If a niche is empty, a genome always is compatible (note that a niche can't be empyt)
                     None => true,
