@@ -132,13 +132,19 @@ fn test_innovation_alignment() {
     let mut left = InnovationContainer::new();
     let mut right = InnovationContainer::new();
     left.insert(Innovation(50), ());
+    left.insert(Innovation(46), ());
     left.insert(Innovation(40), ());
     right.insert(Innovation(50), ());
     right.insert(Innovation(45), ());
+    right.insert(Innovation(51), ());
+    right.insert(Innovation(52), ());
 
     let c = left.align_as_container(&right);
-    assert_eq!(3, c.len());
+    assert_eq!(6, c.len());
     assert_eq!(true, c.get(&Innovation(50)).unwrap().is_match());
     assert_eq!(true, c.get(&Innovation(40)).unwrap().is_excess_left());
     assert_eq!(true, c.get(&Innovation(45)).unwrap().is_disjoint_right());
+    assert_eq!(true, c.get(&Innovation(46)).unwrap().is_disjoint_left());
+    assert_eq!(true, c.get(&Innovation(51)).unwrap().is_excess_right());
+    assert_eq!(true, c.get(&Innovation(52)).unwrap().is_excess_right());
 }
