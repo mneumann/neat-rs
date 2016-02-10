@@ -3,12 +3,9 @@ use super::innovation::InnovationContainer;
 use super::alignment::Alignment;
 use std::cmp;
 
-pub trait Compatibility {
-    /// Calculates the compatibility between two gene lists.
-    fn between<T: Gene>(&self,
-                        genes_left: &InnovationContainer<T>,
-                        genes_right: &InnovationContainer<T>)
-                        -> f64;
+pub trait Compatibility<T> {
+    /// Calculates the compatibility between two items (gene lists, genomes etc.)
+    fn between(&self, left: &T, right: &T) -> f64;
 }
 
 pub struct WeightedCompatibility {
@@ -17,11 +14,11 @@ pub struct WeightedCompatibility {
     pub weight: f64,
 }
 
-impl Compatibility for WeightedCompatibility {
-    fn between<T: Gene>(&self,
-                        genes_left: &InnovationContainer<T>,
-                        genes_right: &InnovationContainer<T>)
-                        -> f64 {
+impl<T: Gene> Compatibility<InnovationContainer<T>> for WeightedCompatibility {
+    fn between(&self,
+               genes_left: &InnovationContainer<T>,
+               genes_right: &InnovationContainer<T>)
+               -> f64 {
         let max_len = cmp::max(genes_left.len(), genes_right.len());
         assert!(max_len > 0);
 

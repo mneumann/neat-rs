@@ -56,6 +56,16 @@ struct Genome {
     node_genes: InnovationContainer<NodeGene>,
 }
 
+pub struct WeightedGenomeCompatibility {
+    pub w: WeightedCompatibility,
+}
+
+impl Compatibility<Genome> for WeightedGenomeCompatibility {
+    fn between(&self, genome_left: &Genome, genome_right: &Genome) -> f64 {
+        self.w.between(&genome_left.link_genes, &genome_right.link_genes)
+    }
+}
+
 type Fitness = f64;
 
 // A niche can never be empty!
@@ -138,7 +148,7 @@ impl RatedPopulation {
                                   mate: &M)
                                   -> (RatedPopulation, UnratedPopulation)
         where R: Rng,
-              C: Compatibility,
+              C: Compatibility<Genome>,
               M: Mate
     {
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
@@ -208,7 +218,7 @@ impl RatedPopulation {
     // Partitions the whole population into species (niches)
     fn partition<R, C>(self, rng: &mut R, threshold: f64, compatibility: &C) -> Vec<Niche>
         where R: Rng,
-              C: Compatibility
+              C: Compatibility<Genome>
     {
         let mut niches: Vec<Niche> = Vec::new();
 
@@ -216,9 +226,7 @@ impl RatedPopulation {
             for niche in niches.iter_mut() {
                 // Is this genome compatible with this niche? Test against a random genome.
                 let compatible = match rng.choose(&niche.genomes) {
-                    Some(&(_, ref probe)) => {
-                        compatibility.between(&probe.link_genes, &genome.link_genes) < threshold
-                    }
+                    Some(&(_, ref probe)) => compatibility.between(probe, &genome) < threshold,
                     // If a niche is empty, a genome always is compatible (note that a niche can't be empyt)
                     None => true,
                 };
@@ -227,7 +235,7 @@ impl RatedPopulation {
                     continue 'outer;
                 }
             }
-            // if no compatible niche was found, insert into a new niche.
+            // if no compatible niche was found, create a new niche containing this genome.
             niches.push(Niche::new_with(fitness, genome));
         }
 
