@@ -3,11 +3,13 @@
 extern crate rand;
 
 use std::cmp;
-use innovation::{Innovation, InnovationContainer, Alignment};
+use innovation::{Innovation, InnovationContainer};
+use alignment::Alignment;
 use rand::{Rng, Closed01};
 
 mod innovation;
 mod selection;
+mod alignment;
 
 trait Gene: Clone {
     fn weight_distance(&self, other: &Self) -> f64;

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use super::alignment::Alignment;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct Innovation(usize);
@@ -9,15 +10,6 @@ pub struct InnovationRange(Innovation, Innovation);
 #[derive(Debug, Clone)]
 pub struct InnovationContainer<T> {
     map: BTreeMap<Innovation, T>,
-}
-
-/// Align the innovations of two InnovationContainers.
-pub enum Alignment<'a, T: 'a> {
-    Match(&'a T, &'a T),
-    DisjointLeft(&'a T),
-    DisjointRight(&'a T),
-    ExcessLeft(&'a T),
-    ExcessRight(&'a T),
 }
 
 impl Innovation {
@@ -58,7 +50,7 @@ impl<T> InnovationContainer<T> {
     }
 
     pub fn len(&self) -> usize {
-        self.len()
+        self.map.len()
     }
 
     // Returns the min and max innovation numbers (inclusive)
@@ -66,10 +58,17 @@ impl<T> InnovationContainer<T> {
         InnovationRange::from_sorted_iter(self.map.keys().cloned()).unwrap()
     }
 
+    fn align_as_container<'a>(&'a self,
+                              right: &'a InnovationContainer<T>)
+                              -> InnovationContainer<Alignment<'a, T>> {
+        let mut c = InnovationContainer::new();
+        self.align(right, &mut |innov, alignment| c.insert(innov, alignment));
+        c
+    }
+
     pub fn align<'a, F>(&'a self, right: &'a InnovationContainer<T>, f: &mut F)
         where F: FnMut(Innovation, Alignment<'a, T>)
     {
-
         let range_left = self.innovation_range();
         let range_right = right.innovation_range();
 
@@ -126,4 +125,20 @@ fn test_innovation_range() {
     genome.insert(Innovation(0), ());
     assert_eq!(InnovationRange(Innovation(0), Innovation(100)),
                genome.innovation_range());
+}
+
+#[test]
+fn test_innovation_alignment() {
+    let mut left = InnovationContainer::new();
+    let mut right = InnovationContainer::new();
+    left.insert(Innovation(50), ());
+    left.insert(Innovation(40), ());
+    right.insert(Innovation(50), ());
+    right.insert(Innovation(45), ());
+
+    let c = left.align_as_container(&right);
+    assert_eq!(3, c.len());
+    assert_eq!(true, c.get(&Innovation(50)).unwrap().is_match());
+    assert_eq!(true, c.get(&Innovation(40)).unwrap().is_excess_left());
+    assert_eq!(true, c.get(&Innovation(45)).unwrap().is_disjoint_right());
 }
