@@ -12,6 +12,7 @@ mod innovation;
 mod selection;
 mod alignment;
 mod compatibility;
+mod crossover;
 
 pub trait Gene: Clone {
     fn weight_distance(&self, other: &Self) -> f64;
@@ -51,88 +52,6 @@ impl Gene for LinkGene {
 struct Genome {
     link_genes: InnovationContainer<LinkGene>,
     node_genes: InnovationContainer<NodeGene>,
-}
-
-
-/// These describe the probabilities to take a gene from one of the 
-/// parents during crossover.
-/// XXX: It's probably faster to not use floats here.
-struct CrossoverProbabilities {
-    /// Probability to take a matching gene from the fitter (first) parent.
-    prob_match1: Closed01<f32>,
-
-    /// Probability to take a disjoint gene from the fitter (first) parent.
-    prob_disjoint1: Closed01<f32>,
-
-    /// Probability to take an excess gene from the fitter (first) parent.
-    prob_excess1: Closed01<f32>,
-
-    /// Probability to take a disjoint gene from the less fit parent.
-    prob_disjoint2: Closed01<f32>,
-
-    /// Probability to take an excess gene from the less fit parent.
-    prob_excess2: Closed01<f32>,
-}
-
-fn is_probable<R: Rng>(prob: &Closed01<f32>, rng: &mut R) -> bool {
-    if prob.0 < 1.0 {
-        let v: f32 = rng.gen(); // half open [0, 1)
-        debug_assert!(v >= 0.0 && v < 1.0);
-        v < prob.0
-    } else {
-        true
-    }
-}
-
-/// We assume `parent1` to be the fitter parent. Takes gene 
-/// either from `parent1` or `parent2` according to
-/// the probabilities specified and the relative fitness of the parents.
-fn crossover<T: Clone, R: Rng>(parent_left: &InnovationContainer<T>,
-                               parent_right: &InnovationContainer<T>,
-                               p: &CrossoverProbabilities,
-                               rng: &mut R)
-                               -> InnovationContainer<T> {
-
-    let mut offspring = InnovationContainer::new();
-
-    parent_left.align(parent_right,
-                      &mut |innov, alignment| {
-                          match alignment {
-                              Alignment::Match(gene_left, gene_right) => {
-                                  if is_probable(&p.prob_match1, rng) {
-                                      offspring.insert(innov, gene_left.clone());
-                                  } else {
-                                      offspring.insert(innov, gene_right.clone());
-                                  }
-                              }
-
-                              Alignment::DisjointLeft(gene_left) => {
-                                  if is_probable(&p.prob_disjoint1, rng) {
-                                      offspring.insert(innov, gene_left.clone());
-                                  }
-                              }
-
-                              Alignment::DisjointRight(gene_right) => {
-                                  if is_probable(&p.prob_disjoint2, rng) {
-                                      offspring.insert(innov, gene_right.clone());
-                                  }
-                              }
-
-                              Alignment::ExcessLeft(gene_left) => {
-                                  if is_probable(&p.prob_excess1, rng) {
-                                      offspring.insert(innov, gene_left.clone());
-                                  }
-                              }
-
-                              Alignment::ExcessRight(gene_right) => {
-                                  if is_probable(&p.prob_excess2, rng) {
-                                      offspring.insert(innov, gene_right.clone());
-                                  }
-                              }
-                          }
-                      });
-
-    offspring
 }
 
 type Fitness = f64;
