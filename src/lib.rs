@@ -2,9 +2,8 @@
 
 extern crate rand;
 
-use std::collections::BTreeMap;
 use std::cmp;
-use innovation::Innovation;
+use innovation::{Innovation, InnovationContainer, Alignment};
 use rand::{Rng, Closed01};
 
 mod innovation;
@@ -46,47 +45,8 @@ impl Gene for LinkGene {
 
 #[derive(Clone)]
 struct Genome {
-    link_genes: BTreeMap<Innovation, LinkGene>,
-    node_genes: BTreeMap<Innovation, NodeGene>,
-}
-
-enum Correlation<'a, T: 'a> {
-    Matching(&'a T, &'a T),
-    DisjointLeft(&'a T),
-    DisjointRight(&'a T),
-    ExcessLeft(&'a T),
-    ExcessRight(&'a T),
-}
-
-/// Correlate the genes in `genes_left` with those in `genes_right`.
-fn correlate<'a, T, F>(genes_left: &'a BTreeMap<Innovation, T>,
-                       genes_right: &'a BTreeMap<Innovation, T>,
-                       f: &mut F)
-    where F: FnMut(Innovation, Correlation<'a, T>)
-{
-    let range_left = innovation::innovation_range(genes_left);
-    let range_right = innovation::innovation_range(genes_right);
-
-    for (innov_left, gene_left) in genes_left.iter() {
-        if innov_left.is_within(&range_right) {
-            match genes_right.get(innov_left) {
-                Some(gene_right) => f(*innov_left, Correlation::Matching(gene_left, gene_right)),
-                None => f(*innov_left, Correlation::DisjointLeft(gene_left)),
-            }
-        } else {
-            f(*innov_left, Correlation::ExcessLeft(gene_left))
-        }
-    }
-
-    for (innov_right, gene_right) in genes_right.iter() {
-        if innov_right.is_within(&range_left) {
-            if !genes_left.contains_key(innov_right) {
-                f(*innov_right, Correlation::DisjointRight(gene_right))
-            }
-        } else {
-            f(*innov_right, Correlation::ExcessRight(gene_right))
-        }
-    }
+    link_genes: InnovationContainer<LinkGene>,
+    node_genes: InnovationContainer<NodeGene>,
 }
 
 struct CompatibilityCoefficients {
@@ -96,8 +56,8 @@ struct CompatibilityCoefficients {
 }
 
 /// Calculates the compatibility between two gene lists.
-fn compatibility<T: Gene>(genes1: &BTreeMap<Innovation, T>,
-                          genes2: &BTreeMap<Innovation, T>,
+fn compatibility<T: Gene>(genes1: &InnovationContainer<T>,
+                          genes2: &InnovationContainer<T>,
                           coeff: &CompatibilityCoefficients)
                           -> f64 {
     let max_len = cmp::max(genes1.len(), genes2.len());
@@ -108,22 +68,23 @@ fn compatibility<T: Gene>(genes1: &BTreeMap<Innovation, T>,
     let mut excess = 0;
     let mut weight_dist = 0.0;
 
-    correlate(genes1,
-              genes2,
-              &mut |_, correlation| {
-                  match correlation {
-                      Correlation::Matching(gene_left, gene_right) => {
-                          matching += 1;
-                          weight_dist += gene_left.weight_distance(gene_right).abs();
-                      }
-                      Correlation::DisjointLeft(_) | Correlation::DisjointRight(_) => {
-                          disjoint += 1;
-                      }
-                      Correlation::ExcessLeft(_) | Correlation::ExcessRight(_) => {
-                          excess += 1;
-                      }
-                  }
-              });
+    InnovationContainer::align(genes1,
+                               genes2,
+                               &mut |_, alignment| {
+                                   match alignment {
+                                       Alignment::Match(gene_left, gene_right) => {
+                                           matching += 1;
+                                           weight_dist += gene_left.weight_distance(gene_right)
+                                                                   .abs();
+                                       }
+                                       Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
+                                           disjoint += 1;
+                                       }
+                                       Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
+                                           excess += 1;
+                                       }
+                                   }
+                               });
 
     assert!(2 * matching + disjoint + excess == genes1.len() + genes2.len());
 
@@ -170,51 +131,51 @@ fn is_probable<R: Rng>(prob: &Closed01<f32>, rng: &mut R) -> bool {
 /// We assume `parent1` to be the fitter parent. Takes gene 
 /// either from `parent1` or `parent2` according to
 /// the probabilities specified and the relative fitness of the parents.
-fn crossover<T: Clone, R: Rng>(parent1: &BTreeMap<Innovation, T>,
-                               parent2: &BTreeMap<Innovation, T>,
+fn crossover<T: Clone, R: Rng>(parent1: &InnovationContainer<T>,
+                               parent2: &InnovationContainer<T>,
                                p: &CrossoverProbabilities,
                                rng: &mut R)
-                               -> BTreeMap<Innovation, T> {
+                               -> InnovationContainer<T> {
 
-    let mut offspring = BTreeMap::new();
+    let mut offspring = InnovationContainer::new();
 
-    correlate(parent1,
-              parent2,
-              &mut |innov, correlation| {
-                  match correlation {
-                      Correlation::Matching(gene_left, gene_right) => {
-                          if is_probable(&p.prob_match1, rng) {
-                              offspring.insert(innov, gene_left.clone());
-                          } else {
-                              offspring.insert(innov, gene_right.clone());
-                          }
-                      }
+    InnovationContainer::align(parent1,
+                               parent2,
+                               &mut |innov, alignment| {
+                                   match alignment {
+                                       Alignment::Match(gene_left, gene_right) => {
+                                           if is_probable(&p.prob_match1, rng) {
+                                               offspring.insert(innov, gene_left.clone());
+                                           } else {
+                                               offspring.insert(innov, gene_right.clone());
+                                           }
+                                       }
 
-                      Correlation::DisjointLeft(gene_left) => {
-                          if is_probable(&p.prob_disjoint1, rng) {
-                              offspring.insert(innov, gene_left.clone());
-                          }
-                      }
+                                       Alignment::DisjointLeft(gene_left) => {
+                                           if is_probable(&p.prob_disjoint1, rng) {
+                                               offspring.insert(innov, gene_left.clone());
+                                           }
+                                       }
 
-                      Correlation::DisjointRight(gene_right) => {
-                          if is_probable(&p.prob_disjoint2, rng) {
-                              offspring.insert(innov, gene_right.clone());
-                          }
-                      }
+                                       Alignment::DisjointRight(gene_right) => {
+                                           if is_probable(&p.prob_disjoint2, rng) {
+                                               offspring.insert(innov, gene_right.clone());
+                                           }
+                                       }
 
-                      Correlation::ExcessLeft(gene_left) => {
-                          if is_probable(&p.prob_excess1, rng) {
-                              offspring.insert(innov, gene_left.clone());
-                          }
-                      }
+                                       Alignment::ExcessLeft(gene_left) => {
+                                           if is_probable(&p.prob_excess1, rng) {
+                                               offspring.insert(innov, gene_left.clone());
+                                           }
+                                       }
 
-                      Correlation::ExcessRight(gene_right) => {
-                          if is_probable(&p.prob_excess2, rng) {
-                              offspring.insert(innov, gene_right.clone());
-                          }
-                      }
-                  }
-              });
+                                       Alignment::ExcessRight(gene_right) => {
+                                           if is_probable(&p.prob_excess2, rng) {
+                                               offspring.insert(innov, gene_right.clone());
+                                           }
+                                       }
+                                   }
+                               });
 
     offspring
 }
@@ -297,7 +258,8 @@ impl RatedPopulation {
                             tournament_k: usize,
                             rng: &mut R,
                             threshold: f64,
-                            coeff: &CompatibilityCoefficients) -> (RatedPopulation, UnratedPopulation)
+                            coeff: &CompatibilityCoefficients)
+                            -> (RatedPopulation, UnratedPopulation)
         where R: Rng
     {
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
@@ -357,8 +319,8 @@ impl RatedPopulation {
         }
 
 
-        (RatedPopulation{genomes: new_rated_population},
-         UnratedPopulation{genomes: new_unrated_population})
+        (RatedPopulation { genomes: new_rated_population },
+         UnratedPopulation { genomes: new_unrated_population })
     }
 
     // Partitions the whole population into species (niches)
