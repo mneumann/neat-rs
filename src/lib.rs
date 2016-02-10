@@ -56,11 +56,11 @@ struct CompatibilityCoefficients {
 }
 
 /// Calculates the compatibility between two gene lists.
-fn compatibility<T: Gene>(genes1: &InnovationContainer<T>,
-                          genes2: &InnovationContainer<T>,
+fn compatibility<T: Gene>(genes_left: &InnovationContainer<T>,
+                          genes_right: &InnovationContainer<T>,
                           coeff: &CompatibilityCoefficients)
                           -> f64 {
-    let max_len = cmp::max(genes1.len(), genes2.len());
+    let max_len = cmp::max(genes_left.len(), genes_right.len());
     assert!(max_len > 0);
 
     let mut matching = 0;
@@ -68,25 +68,24 @@ fn compatibility<T: Gene>(genes1: &InnovationContainer<T>,
     let mut excess = 0;
     let mut weight_dist = 0.0;
 
-    InnovationContainer::align(genes1,
-                               genes2,
-                               &mut |_, alignment| {
-                                   match alignment {
-                                       Alignment::Match(gene_left, gene_right) => {
-                                           matching += 1;
-                                           weight_dist += gene_left.weight_distance(gene_right)
-                                                                   .abs();
-                                       }
-                                       Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
-                                           disjoint += 1;
-                                       }
-                                       Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
-                                           excess += 1;
-                                       }
-                                   }
-                               });
+    genes_left.align(genes_right,
+                     &mut |_, alignment| {
+                         match alignment {
+                             Alignment::Match(gene_left, gene_right) => {
+                                 matching += 1;
+                                 weight_dist += gene_left.weight_distance(gene_right)
+                                                         .abs();
+                             }
+                             Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
+                                 disjoint += 1;
+                             }
+                             Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
+                                 excess += 1;
+                             }
+                         }
+                     });
 
-    assert!(2 * matching + disjoint + excess == genes1.len() + genes2.len());
+    assert!(2 * matching + disjoint + excess == genes_left.len() + genes_right.len());
 
     coeff.excess * (excess as f64) / (max_len as f64) +
     coeff.disjoint * (disjoint as f64) / (max_len as f64) +
@@ -131,51 +130,50 @@ fn is_probable<R: Rng>(prob: &Closed01<f32>, rng: &mut R) -> bool {
 /// We assume `parent1` to be the fitter parent. Takes gene 
 /// either from `parent1` or `parent2` according to
 /// the probabilities specified and the relative fitness of the parents.
-fn crossover<T: Clone, R: Rng>(parent1: &InnovationContainer<T>,
-                               parent2: &InnovationContainer<T>,
+fn crossover<T: Clone, R: Rng>(parent_left: &InnovationContainer<T>,
+                               parent_right: &InnovationContainer<T>,
                                p: &CrossoverProbabilities,
                                rng: &mut R)
                                -> InnovationContainer<T> {
 
     let mut offspring = InnovationContainer::new();
 
-    InnovationContainer::align(parent1,
-                               parent2,
-                               &mut |innov, alignment| {
-                                   match alignment {
-                                       Alignment::Match(gene_left, gene_right) => {
-                                           if is_probable(&p.prob_match1, rng) {
-                                               offspring.insert(innov, gene_left.clone());
-                                           } else {
-                                               offspring.insert(innov, gene_right.clone());
-                                           }
-                                       }
+    parent_left.align(parent_right,
+                      &mut |innov, alignment| {
+                          match alignment {
+                              Alignment::Match(gene_left, gene_right) => {
+                                  if is_probable(&p.prob_match1, rng) {
+                                      offspring.insert(innov, gene_left.clone());
+                                  } else {
+                                      offspring.insert(innov, gene_right.clone());
+                                  }
+                              }
 
-                                       Alignment::DisjointLeft(gene_left) => {
-                                           if is_probable(&p.prob_disjoint1, rng) {
-                                               offspring.insert(innov, gene_left.clone());
-                                           }
-                                       }
+                              Alignment::DisjointLeft(gene_left) => {
+                                  if is_probable(&p.prob_disjoint1, rng) {
+                                      offspring.insert(innov, gene_left.clone());
+                                  }
+                              }
 
-                                       Alignment::DisjointRight(gene_right) => {
-                                           if is_probable(&p.prob_disjoint2, rng) {
-                                               offspring.insert(innov, gene_right.clone());
-                                           }
-                                       }
+                              Alignment::DisjointRight(gene_right) => {
+                                  if is_probable(&p.prob_disjoint2, rng) {
+                                      offspring.insert(innov, gene_right.clone());
+                                  }
+                              }
 
-                                       Alignment::ExcessLeft(gene_left) => {
-                                           if is_probable(&p.prob_excess1, rng) {
-                                               offspring.insert(innov, gene_left.clone());
-                                           }
-                                       }
+                              Alignment::ExcessLeft(gene_left) => {
+                                  if is_probable(&p.prob_excess1, rng) {
+                                      offspring.insert(innov, gene_left.clone());
+                                  }
+                              }
 
-                                       Alignment::ExcessRight(gene_right) => {
-                                           if is_probable(&p.prob_excess2, rng) {
-                                               offspring.insert(innov, gene_right.clone());
-                                           }
-                                       }
-                                   }
-                               });
+                              Alignment::ExcessRight(gene_right) => {
+                                  if is_probable(&p.prob_excess2, rng) {
+                                      offspring.insert(innov, gene_right.clone());
+                                  }
+                              }
+                          }
+                      });
 
     offspring
 }

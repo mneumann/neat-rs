@@ -53,12 +53,8 @@ impl<T> InnovationContainer<T> {
         self.map.insert(innov, data);
     }
 
-    pub fn get(&self, innov: &Innovation) -> Option<&T> {
+    fn get(&self, innov: &Innovation) -> Option<&T> {
         self.map.get(innov)
-    }
-
-    pub fn contains_key(&self, innov: &Innovation) -> bool {
-        self.map.contains_key(innov)
     }
 
     pub fn len(&self) -> usize {
@@ -70,18 +66,16 @@ impl<T> InnovationContainer<T> {
         InnovationRange::from_sorted_iter(self.map.keys().cloned()).unwrap()
     }
 
-    pub fn align<'a, F>(genes_left: &'a InnovationContainer<T>,
-                        genes_right: &'a InnovationContainer<T>,
-                        f: &mut F)
+    pub fn align<'a, F>(&'a self, right: &'a InnovationContainer<T>, f: &mut F)
         where F: FnMut(Innovation, Alignment<'a, T>)
     {
 
-        let range_left = genes_left.innovation_range();
-        let range_right = genes_right.innovation_range();
+        let range_left = self.innovation_range();
+        let range_right = right.innovation_range();
 
-        for (innov_left, gene_left) in genes_left.map.iter() {
+        for (innov_left, gene_left) in self.map.iter() {
             if innov_left.is_within(&range_right) {
-                match genes_right.get(innov_left) {
+                match right.get(innov_left) {
                     Some(gene_right) => f(*innov_left, Alignment::Match(gene_left, gene_right)),
                     None => f(*innov_left, Alignment::DisjointLeft(gene_left)),
                 }
@@ -90,16 +84,15 @@ impl<T> InnovationContainer<T> {
             }
         }
 
-        for (innov_right, gene_right) in genes_right.map.iter() {
+        for (innov_right, gene_right) in right.map.iter() {
             if innov_right.is_within(&range_left) {
-                if !genes_left.contains_key(innov_right) {
+                if !self.map.contains_key(innov_right) {
                     f(*innov_right, Alignment::DisjointRight(gene_right))
                 }
             } else {
                 f(*innov_right, Alignment::ExcessRight(gene_right))
             }
         }
-
     }
 }
 
