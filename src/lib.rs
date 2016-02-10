@@ -1,4 +1,4 @@
-#![feature(iter_arith)]
+#![feature(iter_arith, zero_one)]
 
 extern crate rand;
 
@@ -6,19 +6,18 @@ use std::cmp;
 use innovation::{Innovation, InnovationContainer};
 use alignment::Alignment;
 use rand::{Rng, Closed01};
-use compatibility::{Compatibility, WeightedCompatibility};
 use mate::Mate;
+use traits::Distance;
+use traits::Genotype;
+use fitness::Fitness;
 
+mod traits;
 mod innovation;
 mod selection;
 mod alignment;
-mod compatibility;
 mod crossover;
 mod mate;
-
-pub trait Gene: Clone {
-    fn weight_distance(&self, other: &Self) -> f64;
-}
+mod fitness;
 
 #[derive(Copy, Clone)]
 enum NodeType {
@@ -44,29 +43,79 @@ struct LinkGene {
     active: bool,
 }
 
-impl Gene for LinkGene {
-    fn weight_distance(&self, other: &LinkGene) -> f64 {
-        self.weight - other.weight
-    }
-}
-
 #[derive(Clone)]
 struct Genome {
     link_genes: InnovationContainer<LinkGene>,
     node_genes: InnovationContainer<NodeGene>,
 }
 
-pub struct WeightedGenomeCompatibility {
-    pub w: WeightedCompatibility,
-}
+struct LinkGeneWeightDistance;
 
-impl Compatibility<Genome> for WeightedGenomeCompatibility {
-    fn between(&self, genome_left: &Genome, genome_right: &Genome) -> f64 {
-        self.w.between(&genome_left.link_genes, &genome_right.link_genes)
+impl Distance<LinkGene> for LinkGeneWeightDistance {
+    fn distance(&self, a: &LinkGene, b: &LinkGene) -> f64 {
+        a.weight - b.weight
     }
 }
 
-type Fitness = f64;
+pub struct LinkGeneListDistance {
+    pub excess: f64,
+    pub disjoint: f64,
+    pub weight: f64,
+}
+
+impl Distance<InnovationContainer<LinkGene>> for LinkGeneListDistance {
+    fn distance(&self,
+                genes_left: &InnovationContainer<LinkGene>,
+                genes_right: &InnovationContainer<LinkGene>)
+                -> f64 {
+        let max_len = cmp::max(genes_left.len(), genes_right.len());
+        assert!(max_len > 0);
+
+        let mut matching = 0;
+        let mut disjoint = 0;
+        let mut excess = 0;
+        let mut weight_dist = 0.0;
+
+        genes_left.align(genes_right,
+                         &mut |_, alignment| {
+                             match alignment {
+                                 Alignment::Match(gene_left, gene_right) => {
+                                     matching += 1;
+                                     weight_dist += LinkGeneWeightDistance.distance(gene_left,
+                                                                                    gene_right)
+                                                                          .abs();
+                                 }
+                                 Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
+                                     disjoint += 1;
+                                 }
+                                 Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
+                                     excess += 1;
+                                 }
+                             }
+                         });
+
+        assert!(2 * matching + disjoint + excess == genes_left.len() + genes_right.len());
+
+        self.excess * (excess as f64) / (max_len as f64) +
+        self.disjoint * (disjoint as f64) / (max_len as f64) +
+        self.weight *
+        if matching > 0 {
+            weight_dist / (matching as f64)
+        } else {
+            0.0
+        }
+    }
+}
+
+pub struct GenomeDistance {
+    pub l: LinkGeneListDistance,
+}
+
+impl Distance<Genome> for GenomeDistance {
+    fn distance(&self, genome_left: &Genome, genome_right: &Genome) -> f64 {
+        self.l.distance(&genome_left.link_genes, &genome_right.link_genes)
+    }
+}
 
 // A niche can never be empty!
 struct Niche {
@@ -87,7 +136,6 @@ impl Niche {
     }
 
     fn new_with(fitness: Fitness, genome: Box<Genome>) -> Niche {
-        assert!(fitness >= 0.0);
         Niche {
             genomes: vec![(fitness, genome)],
             fitness_sum: fitness,
@@ -95,17 +143,16 @@ impl Niche {
     }
 
     fn mean_fitness(&self) -> Fitness {
-        self.fitness_sum / (self.len() as Fitness)
+        self.fitness_sum / Fitness::new(self.len() as f64)
     }
 
     fn add(&mut self, fitness: Fitness, genome: Box<Genome>) {
-        assert!(fitness >= 0.0);
         self.genomes.push((fitness, genome));
-        self.fitness_sum += fitness;
+        self.fitness_sum = self.fitness_sum + fitness;
     }
 
     fn sort(mut self) -> Self {
-        (&mut self.genomes).sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(cmp::Ordering::Less));
+        (&mut self.genomes).sort_by(|a, b| a.0.cmp(&b.0));
         self
     }
 }
@@ -148,7 +195,7 @@ impl RatedPopulation {
                                   mate: &M)
                                   -> (RatedPopulation, UnratedPopulation)
         where R: Rng,
-              C: Compatibility<Genome>,
+              C: Distance<Genome>,
               M: Mate
     {
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
@@ -163,7 +210,7 @@ impl RatedPopulation {
 
         for niche in niches.into_iter() {
             // calculate new size of niche, and size of elites, and selection size.
-            let percentage_of_population: f64 = niche.mean_fitness() / total_mean;
+            let percentage_of_population: f64 = (niche.mean_fitness() / total_mean).get();
             assert!(percentage_of_population >= 0.0 && percentage_of_population <= 1.0);
 
             let niche_size = pop_size as f64 * percentage_of_population;
@@ -218,7 +265,7 @@ impl RatedPopulation {
     // Partitions the whole population into species (niches)
     fn partition<R, C>(self, rng: &mut R, threshold: f64, compatibility: &C) -> Vec<Niche>
         where R: Rng,
-              C: Compatibility<Genome>
+              C: Distance<Genome>
     {
         let mut niches: Vec<Niche> = Vec::new();
 
@@ -226,7 +273,7 @@ impl RatedPopulation {
             for niche in niches.iter_mut() {
                 // Is this genome compatible with this niche? Test against a random genome.
                 let compatible = match rng.choose(&niche.genomes) {
-                    Some(&(_, ref probe)) => compatibility.between(probe, &genome) < threshold,
+                    Some(&(_, ref probe)) => compatibility.distance(probe, &genome) < threshold,
                     // If a niche is empty, a genome always is compatible (note that a niche can't be empyt)
                     None => true,
                 };
