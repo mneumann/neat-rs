@@ -89,7 +89,7 @@ impl GlobalContext {
 
     // Generates a NetworkGenome with `n_inputs` input nodes and `n_outputs` output nodes.
     // The genome will not have any link nodes.
-    fn generate_network_genome(&mut self, n_inputs: usize, n_outputs: usize) -> NetworkGenome {
+    fn generate_genome(&mut self, n_inputs: usize, n_outputs: usize) -> NetworkGenome {
         assert!(n_inputs > 0 && n_outputs > 0);
         let mut nodes = InnovationContainer::new();
         for _ in 0..n_inputs {
@@ -134,7 +134,7 @@ fn main() {
     // start with minimal random topology.
     let mut ctx = GlobalContext::new();
 
-    let template_genome = ctx.generate_network_genome(INPUTS, OUTPUTS);
+    let template_genome = ctx.generate_genome(INPUTS, OUTPUTS);
 
     println!("{:#?}", template_genome);
 

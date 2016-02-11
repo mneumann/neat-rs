@@ -142,16 +142,24 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
         assert!(self.len() > 0);
         let niches = self.partition(rng, threshold, compatibility);
-        assert!(niches.len() > 0);
+        let num_niches = niches.len();
+        assert!(num_niches > 0);
         let total_mean: Fitness = niches.iter().map(|ind| ind.mean_fitness()).sum();
-        // XXX: total_mean = 0.0?
+        assert!(total_mean.get() >= 0.0);
 
         let mut new_unrated_population: Population<T, Unrated> = Population::new();
         let mut new_rated_population: Population<T, Rated> = Population::new();
 
         for niche in niches.into_iter() {
+            let percentage_of_population: f64 = if total_mean.get() == 0.0 {
+                // all individuals have a fitness of 0.0.
+                // we will equally allow each niche to procude offspring.
+                1.0 / (num_niches as f64)
+            } else {
+                (niche.mean_fitness() / total_mean).get()
+            };
+
             // calculate new size of niche, and size of elites, and selection size.
-            let percentage_of_population: f64 = (niche.mean_fitness() / total_mean).get();
             assert!(percentage_of_population >= 0.0 && percentage_of_population <= 1.0);
 
             let niche_size = pop_size as f64 * percentage_of_population;
@@ -188,7 +196,6 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                     let offspring = mate.mate(&sorted_niche.individuals[parent1].genome,
                                               &sorted_niche.individuals[parent2].genome,
                                               rng);
-                    // let offspring = sorted_niche.genomes[parent1].1.clone();
                     new_unrated_population.add_genome(Box::new(offspring));
                     n -= 1;
                 }

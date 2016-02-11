@@ -55,7 +55,9 @@ impl Distance<InnovationContainer<LinkGene>> for LinkGeneListDistance {
                 genes_right: &InnovationContainer<LinkGene>)
                 -> f64 {
         let max_len = cmp::max(genes_left.len(), genes_right.len());
-        assert!(max_len > 0);
+        if max_len == 0 {
+            return 0.0;
+        }
 
         let mut matching = 0;
         let mut disjoint = 0;
