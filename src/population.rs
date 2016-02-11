@@ -3,77 +3,86 @@ use super::traits::{Genotype, Distance};
 use super::selection;
 use rand::{Rng, Closed01};
 use super::mate::Mate;
+use std::marker::PhantomData;
+use std::num::Zero;
+use std::fmt::Debug;
 
-/// A Niche is a subpopulation. It can never be empty! 
 #[derive(Debug)]
-struct Niche<T: Genotype> {
-    genomes: Vec<(Fitness, Box<T>)>,
-    fitness_sum: Fitness,
+pub struct Individual<T: Debug> {
+    fitness: Fitness,
+    genome: Box<T>,
 }
 
-impl<T: Genotype> Niche<T> {
-    /// Creates a new Niche with a single element.
-    fn new_with(fitness: Fitness, genome: Box<T>) -> Niche<T> {
-        Niche {
-            genomes: vec![(fitness, genome)],
-            fitness_sum: fitness,
+pub trait Rating {}
+pub struct Rated;
+pub struct Unrated;
+
+impl Rating for Rated {}
+impl Rating for Unrated {}
+
+#[derive(Debug)]
+pub struct Population<T: Genotype + Debug, R: Rating> {
+    individuals: Vec<Individual<T>>,
+    _marker: PhantomData<R>,
+}
+
+impl<T: Genotype + Debug, R: Rating> Population<T, R> {
+    pub fn new() -> Population<T, R> {
+        Population {
+            individuals: Vec::new(),
+            _marker: PhantomData,
         }
     }
 
-    /// Returns the number of individuals in this Niche. 
-    fn len(&self) -> usize {
-        let l = self.genomes.len();
-        assert!(l > 0);
-        l
+    pub fn new_from_vec(v: Vec<Individual<T>>) -> Population<T, R> {
+        Population {
+            individuals: v,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.individuals.len()
+    }
+}
+
+impl<T: Genotype + Debug> Population<T, Unrated> {
+    pub fn add_genome(&mut self, genome: Box<T>) {
+        self.individuals.push(Individual {
+            fitness: Zero::zero(),
+            genome: genome,
+        });
+    }
+
+    // pub fn rate<F>(self, f: &F) -> RatedPopulation<T> where F: Fn(&T) -> Fitness {
+    // genomes: Vec<(Fitness, Box<T>)>,
+    // }
+    //
+}
+
+impl<T: Genotype + Debug> Population<T, Rated> {
+    pub fn add_individual(&mut self, ind: Individual<T>) {
+        self.individuals.push(ind);
     }
 
     // Return true if genome at position `i` is better that `j`
     fn compare_ij(&self, i: usize, j: usize) -> bool {
-        self.genomes[i].0 > self.genomes[j].0
+        self.individuals[i].fitness > self.individuals[j].fitness
     }
 
     fn mean_fitness(&self) -> Fitness {
-        self.fitness_sum / Fitness::new(self.len() as f64)
-    }
-
-    fn add(&mut self, fitness: Fitness, genome: Box<T>) {
-        self.genomes.push((fitness, genome));
-        self.fitness_sum = self.fitness_sum + fitness;
+        let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness).sum();
+        sum / Fitness::new(self.len() as f64)
     }
 
     fn sort(mut self) -> Self {
-        (&mut self.genomes).sort_by(|a, b| a.0.cmp(&b.0));
+        (&mut self.individuals).sort_by(|a, b| a.fitness.cmp(&b.fitness));
         self
     }
-}
 
-#[derive(Debug)]
-struct RatedPopulation<T: Genotype> {
-    genomes: Vec<(Fitness, Box<T>)>,
-}
-
-#[derive(Debug)]
-pub struct UnratedPopulation<T: Genotype> {
-    genomes: Vec<Box<T>>,
-}
-
-impl<T: Genotype> UnratedPopulation<T> {
-    pub fn new() -> UnratedPopulation<T> {
-        UnratedPopulation { genomes: Vec::new() }
-    }
-
-    pub fn len(&self) -> usize {
-        self.genomes.len()
-    }
-
-    pub fn add(&mut self, genome: Box<T>) {
-        self.genomes.push(genome);
-    }
-}
-
-impl<T: Genotype> RatedPopulation<T> {
-    fn len(&self) -> usize {
-        self.genomes.len()
+    /// Merge `self` with the first `n` individuals from population `other`.
+    fn merge(&mut self, other: Population<T, Rated>, n: usize) {
+        self.individuals.extend(other.individuals.into_iter().take(n));
     }
 
     // We want to create a population of approximately ```pop_size```.
@@ -99,7 +108,7 @@ impl<T: Genotype> RatedPopulation<T> {
                                   threshold: f64,
                                   compatibility: &C,
                                   mate: &M)
-                                  -> (RatedPopulation<T>, UnratedPopulation<T>)
+                                  -> (Population<T, Rated>, Population<T, Unrated>)
         where R: Rng,
               C: Distance<T>,
               M: Mate<T>
@@ -108,11 +117,11 @@ impl<T: Genotype> RatedPopulation<T> {
         assert!(self.len() > 0);
         let niches = self.partition(rng, threshold, compatibility);
         assert!(niches.len() > 0);
-        let total_mean: Fitness = niches.iter().map(|n| n.mean_fitness()).sum();
+        let total_mean: Fitness = niches.iter().map(|ind| ind.mean_fitness()).sum();
         // XXX: total_mean = 0.0?
 
-        let mut new_unrated_population = Vec::new();
-        let mut new_rated_population = Vec::new();
+        let mut new_unrated_population: Population<T, Unrated> = Population::new();
+        let mut new_rated_population: Population<T, Rated> = Population::new();
 
         for niche in niches.into_iter() {
             // calculate new size of niche, and size of elites, and selection size.
@@ -150,46 +159,51 @@ impl<T: Genotype> RatedPopulation<T> {
                                                                        select_size,
                                                                        tournament_k);
 
-                    let offspring = mate.mate(&sorted_niche.genomes[parent1].1,
-                                              &sorted_niche.genomes[parent2].1,
+                    let offspring = mate.mate(&sorted_niche.individuals[parent1].genome,
+                                              &sorted_niche.individuals[parent2].genome,
                                               rng);
                     // let offspring = sorted_niche.genomes[parent1].1.clone();
-                    new_unrated_population.push(Box::new(offspring));
+                    new_unrated_population.add_genome(Box::new(offspring));
                     n -= 1;
                 }
             }
 
             // now copy the elites
-            new_rated_population.extend(sorted_niche.genomes.into_iter().take(elite_size));
+            new_rated_population.merge(sorted_niche, elite_size);
         }
 
 
-        (RatedPopulation { genomes: new_rated_population },
-         UnratedPopulation { genomes: new_unrated_population })
+        return (new_rated_population, new_unrated_population);
     }
 
     // Partitions the whole population into species (niches)
-    fn partition<R, C>(self, rng: &mut R, threshold: f64, compatibility: &C) -> Vec<Niche<T>>
+    fn partition<R, C>(self,
+                       rng: &mut R,
+                       threshold: f64,
+                       compatibility: &C)
+                       -> Vec<Population<T, Rated>>
         where R: Rng,
               C: Distance<T>
     {
-        let mut niches: Vec<Niche<T>> = Vec::new();
+        let mut niches: Vec<Population<T, Rated>> = Vec::new();
 
-        'outer: for (fitness, genome) in self.genomes.into_iter() {
+        'outer: for ind in self.individuals.into_iter() {
             for niche in niches.iter_mut() {
                 // Is this genome compatible with this niche? Test against a random genome.
-                let compatible = match rng.choose(&niche.genomes) {
-                    Some(&(_, ref probe)) => compatibility.distance(probe, &genome) < threshold,
+                let compatible = match rng.choose(&niche.individuals) {
+                    Some(probe) => compatibility.distance(&probe.genome, &ind.genome) < threshold,
                     // If a niche is empty, a genome always is compatible (note that a niche can't be empyt)
                     None => true,
                 };
                 if compatible {
-                    niche.add(fitness, genome);
+                    niche.add_individual(ind);
                     continue 'outer;
                 }
             }
             // if no compatible niche was found, create a new niche containing this genome.
-            niches.push(Niche::new_with(fitness, genome));
+            let mut new_niche = Population::new();
+            new_niche.add_individual(ind);
+            niches.push(new_niche);
         }
 
         niches

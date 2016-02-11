@@ -2,7 +2,7 @@ extern crate neat;
 extern crate graph_neighbor_matching;
 extern crate graph_io_gml as gml;
 
-use neat::population::UnratedPopulation;
+use neat::population::{Population, Rated, Unrated, Individual};
 use neat::network::{NetworkGenome, NodeGene, NodeType};
 use neat::innovation::{Innovation, InnovationContainer};
 use graph_neighbor_matching::similarity_max_degree;
@@ -30,7 +30,7 @@ fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph {
 
     for (&innov, node) in genome.node_genes.map.iter() {
         // make sure the node exists, even if there are no connection to it.
-        builder.add_or_replace_node(innov.get())
+        let _ = builder.add_or_replace_node(innov.get());
     }
 
     for link in genome.link_genes.map.values() {
@@ -109,10 +109,13 @@ fn main() {
 
     println!("{:#?}", template_genome);
 
-    let mut initial_pop = UnratedPopulation::new();
+    let mut initial_pop = Population::<_, Unrated>::new();
 
     for _ in 0..POP_SIZE {
-        initial_pop.add(Box::new(template_genome.clone()));
+        initial_pop.add_genome(Box::new(template_genome.clone()));
     }
     assert!(initial_pop.len() == POP_SIZE);
+
+
+
 }
