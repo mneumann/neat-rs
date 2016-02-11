@@ -20,11 +20,11 @@ pub struct NodeGene {
 #[derive(Debug, Clone)]
 pub struct LinkGene {
     // This points to the NodeGene of that innovation
-    source_node_gene: Innovation,
+    pub source_node_gene: Innovation,
     // This points to the NodeGene of that innovation
-    target_node_gene: Innovation,
-    weight: f64,
-    active: bool,
+    pub target_node_gene: Innovation,
+    pub weight: f64,
+    pub active: bool,
 }
 
 #[derive(Debug, Clone)]

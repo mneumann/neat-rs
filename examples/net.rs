@@ -1,9 +1,59 @@
 extern crate neat;
+extern crate graph_neighbor_matching;
+extern crate graph_io_gml as gml;
 
 use neat::population::UnratedPopulation;
 use neat::network::{NetworkGenome, NodeGene, NodeType};
 use neat::innovation::{Innovation, InnovationContainer};
+use graph_neighbor_matching::similarity_max_degree;
+use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
+fn load_graph(graph_file: &str) -> OwnedGraph {
+    use std::fs::File;
+    use std::io::Read;
+
+    let graph_s = {
+        let mut graph_file = File::open(graph_file).unwrap();
+        let mut graph_s = String::new();
+        let _ = graph_file.read_to_string(&mut graph_s).unwrap();
+        graph_s
+    };
+
+    let graph = gml::parse_gml(&graph_s, &|_| -> Option<()> {Some(())}, &|_| -> Option<()> {Some(())}).unwrap();
+    OwnedGraph::from_petgraph(&graph)
+}
+
+fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph {
+    let mut builder = GraphBuilder::new();
+
+    for (&innov, node) in genome.node_genes.map.iter() {
+        // make sure the node exists, even if there are no connection to it.
+        builder.add_or_replace_node(innov.get())
+    }
+
+    for link in genome.link_genes.map.values() {
+        if link.active {
+            builder.add_edge_unweighted(link.source_node_gene.get(), link.target_node_gene.get());
+        }
+    }
+
+    return builder.graph();
+}
+
+#[derive(Debug)]
+struct FitnessEvaluator {
+    target_graph: OwnedGraph,
+}
+
+impl FitnessEvaluator {
+    // A larger fitness means "better"
+    fn fitness(&self, genome: &NetworkGenome) -> f32 {
+        let graph = genome_to_graph(genome);
+        similarity_max_degree(&graph, &self.target_graph, 20, 0.05).get()
+    }
+}
 
 struct GlobalContext {
     node_innovation_counter: Innovation,
@@ -47,6 +97,11 @@ const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
 fn main() {
+    let fitness_evaluator = FitnessEvaluator {
+        target_graph: load_graph("examples/jeffress.gml"),
+    };
+    println!("{:?}", fitness_evaluator);
+
     // start with minimal random topology.
     let mut ctx = GlobalContext::new();
 

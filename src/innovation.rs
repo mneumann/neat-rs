@@ -9,7 +9,7 @@ pub struct InnovationRange(Innovation, Innovation);
 
 #[derive(Debug, Clone)]
 pub struct InnovationContainer<T> {
-    map: BTreeMap<Innovation, T>,
+    pub map: BTreeMap<Innovation, T>,
 }
 
 impl Iterator for Innovation {
@@ -32,6 +32,10 @@ impl Innovation {
 
     pub fn is_within(&self, range: &InnovationRange) -> bool {
         self >= &range.0 && self <= &range.1
+    }
+
+    pub fn get(&self) -> usize {
+        self.0
     }
 }
 
