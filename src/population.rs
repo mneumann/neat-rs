@@ -2,7 +2,7 @@ use super::fitness::Fitness;
 use super::traits::{Genotype, Distance};
 use super::selection;
 use rand::{Rng, Closed01};
-use super::mate::Mate;
+use super::traits::Mate;
 use std::marker::PhantomData;
 use std::num::Zero;
 use std::fmt::Debug;
@@ -106,34 +106,35 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     }
 
     /// Merge `self` with the first `n` individuals from population `other`.
-    fn merge(&mut self, other: Population<T, Rated>, n: usize) {
-        self.individuals.extend(other.individuals.into_iter().take(n));
+    pub fn merge(&mut self, other: Population<T, Rated>, n: Option<usize>) {
+        let len = other.individuals.len();
+        self.individuals.extend(other.individuals.into_iter().take(n.unwrap_or(len)));
     }
 
-    // We want to create a population of approximately ```pop_size```.
-    // We do not care if there are slightly more individuals than that.
+    // We want to create a population of approximately `pop_size`. We do not care if there are
+    // slightly more or slightly less individuals than that.
     //
     // 1. sort whole popluation into niches
     // 2. calculate the number of offspring for each niche.
     // 3. each niche produces offspring.
     //    - sort each niche according to the fitness value.
-    //    - determine the elitist size. those are always copied into the new generation.
     //    - r% of the best genomes produce offspring
+    //    - determine the elitist size. those are always copied into the new generation.
     //
-    fn produce_offspring<R, C, M>(self,
-                                  pop_size: usize,
-                                  // how many of the best individuals of a niche are copied as-is into the
-                                  // new population?
-                                  elite_percentage: Closed01<f64>,
-                                  // how many of the best individuals of a niche are selected for
-                                  // reproduction?
-                                  selection_percentage: Closed01<f64>,
-                                  tournament_k: usize,
-                                  rng: &mut R,
-                                  threshold: f64,
-                                  compatibility: &C,
-                                  mate: &M)
-                                  -> (Population<T, Rated>, Population<T, Unrated>)
+    pub fn produce_offspring<C, M, R>(self,
+                                      pop_size: usize,
+                                      // how many of the best individuals of a niche are copied as-is into the
+                                      // new population?
+                                      elite_percentage: Closed01<f64>,
+                                      // how many of the best individuals of a niche are selected for
+                                      // reproduction?
+                                      selection_percentage: Closed01<f64>,
+                                      tournament_k: usize,
+                                      threshold: f64,
+                                      compatibility: &C,
+                                      mate: &M,
+                                      rng: &mut R)
+                                      -> (Population<T, Rated>, Population<T, Unrated>)
         where R: Rng,
               C: Distance<T>,
               M: Mate<T>
@@ -194,7 +195,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             }
 
             // now copy the elites
-            new_rated_population.merge(sorted_niche, elite_size);
+            new_rated_population.merge(sorted_niche, Some(elite_size));
         }
 
 

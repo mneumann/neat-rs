@@ -1,15 +1,17 @@
 extern crate neat;
+extern crate rand;
 extern crate graph_neighbor_matching;
 extern crate graph_io_gml as gml;
 
 use neat::population::{Population, Rated, Unrated, Individual};
-use neat::network::{NetworkGenome, NodeGene, NodeType};
+use neat::network::{NetworkGenome, NetworkGenomeDistance, LinkGeneListDistance, NodeGene, NodeType};
 use neat::innovation::{Innovation, InnovationContainer};
 use neat::fitness::Fitness;
+use neat::traits::Mate;
 use graph_neighbor_matching::similarity_max_degree;
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
+use rand::{Rng, Closed01};
 
 fn load_graph(graph_file: &str) -> OwnedGraph {
     use std::fs::File;
@@ -62,6 +64,8 @@ impl FitnessEvaluator {
 struct GlobalContext {
     node_innovation_counter: Innovation,
     link_innovation_counter: Innovation,
+    // (src_node, target_node) -> link_innovation
+    link_innovation_cache: BTreeMap<(Innovation, Innovation), Innovation>,
 }
 
 impl GlobalContext {
@@ -69,7 +73,18 @@ impl GlobalContext {
         GlobalContext {
             node_innovation_counter: Innovation::new(0),
             link_innovation_counter: Innovation::new(0),
+            link_innovation_cache: BTreeMap::new(),
         }
+    }
+
+    fn new_link_innovation(&mut self, source_node_gene: Innovation, target_node_gene: Innovation) -> Innovation {
+        let key = (source_node_gene, target_node_gene);
+        if let Some(&cached_innovation) = self.link_innovation_cache.get(&key) {
+            return cached_innovation;
+        }
+        let new_innovation = self.link_innovation_counter.next().unwrap();
+        self.link_innovation_cache.insert(key, new_innovation);
+        new_innovation
     }
 
     // Generates a NetworkGenome with `n_inputs` input nodes and `n_outputs` output nodes.
@@ -98,7 +113,21 @@ const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
+struct Mater;
+
+impl Mate<NetworkGenome> for Mater {
+    fn mate<R: Rng>(&self,
+                    parent_left: &NetworkGenome,
+                    parent_right: &NetworkGenome,
+                    rng: &mut R)
+                    -> NetworkGenome {
+        parent_left.clone()
+    }
+}
+
 fn main() {
+    let mut rng = rand::thread_rng();
+
     let fitness_evaluator = FitnessEvaluator { target_graph: load_graph("examples/jeffress.gml") };
     println!("{:?}", fitness_evaluator);
 
@@ -116,6 +145,29 @@ fn main() {
     }
     assert!(initial_pop.len() == POP_SIZE);
 
-    let rated = initial_pop.rate(&|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64));
+    let rated = initial_pop.rate_par(&|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64));
+
+    let compatibility = NetworkGenomeDistance {
+        l: LinkGeneListDistance {
+            excess: 1.0,
+            disjoint: 1.0,
+            weight: 0.0,
+        },
+    };
+
     println!("{:#?}", rated);
+
+    let (mut new_rated, new_unrated) = rated.produce_offspring(POP_SIZE,
+                                                           Closed01(0.05),
+                                                           Closed01(0.2),
+                                                           3,
+                                                           0.1, // threshold
+                                                           &compatibility,
+                                                           &Mater,
+                                                           &mut rng);
+    let rated = new_unrated.rate_par(&|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64));
+
+    new_rated.merge(rated, None);
+
+    println!("{:#?}", new_rated);
 }
