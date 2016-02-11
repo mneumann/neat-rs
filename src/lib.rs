@@ -1,6 +1,7 @@
 #![feature(iter_arith, zero_one)]
 
 extern crate rand;
+extern crate rayon;
 
 mod traits;
 pub mod innovation;

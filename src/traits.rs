@@ -7,4 +7,4 @@ pub trait Distance<T> {
     fn distance(&self, left: &T, right: &T) -> f64;
 }
 
-pub trait Genotype {}
+pub trait Genotype: Send {}

@@ -12,6 +12,7 @@ include = ["src/*.rs", "Cargo.toml", "LICENSE", "README.md"]
 [dependencies]
 
 rand = "0.3"
+rayon = { git = "https://github.com/nikomatsakis/rayon" }
 
 [dev-dependencies]
 

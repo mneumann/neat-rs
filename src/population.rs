@@ -6,6 +6,7 @@ use super::mate::Mate;
 use std::marker::PhantomData;
 use std::num::Zero;
 use std::fmt::Debug;
+use rayon::par_iter::*;
 
 #[derive(Debug)]
 pub struct Individual<T: Debug> {
@@ -54,10 +55,32 @@ impl<T: Genotype + Debug> Population<T, Unrated> {
         });
     }
 
-    // pub fn rate<F>(self, f: &F) -> RatedPopulation<T> where F: Fn(&T) -> Fitness {
-    // genomes: Vec<(Fitness, Box<T>)>,
-    // }
-    //
+    pub fn rate<F>(mut self, f: &F) -> Population<T, Rated>
+        where F: Fn(&T) -> Fitness
+    {
+        for ind in self.individuals.iter_mut() {
+            let fitness = f(&ind.genome);
+            ind.fitness = fitness;
+        }
+        Population {
+            individuals: self.individuals,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn rate_par<F>(mut self, f: &F) -> Population<T, Rated>
+        where F: Sync + Fn(&T) -> Fitness
+    {
+        self.individuals.par_iter_mut().for_each(|ind| {
+            let fitness = f(&ind.genome);
+            ind.fitness = fitness;
+        });
+
+        Population {
+            individuals: self.individuals,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T: Genotype + Debug> Population<T, Rated> {
