@@ -5,6 +5,7 @@ extern crate graph_io_gml as gml;
 use neat::population::{Population, Rated, Unrated, Individual};
 use neat::network::{NetworkGenome, NodeGene, NodeType};
 use neat::innovation::{Innovation, InnovationContainer};
+use neat::fitness::Fitness;
 use graph_neighbor_matching::similarity_max_degree;
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use std::collections::BTreeMap;
@@ -21,7 +22,10 @@ fn load_graph(graph_file: &str) -> OwnedGraph {
         graph_s
     };
 
-    let graph = gml::parse_gml(&graph_s, &|_| -> Option<()> {Some(())}, &|_| -> Option<()> {Some(())}).unwrap();
+    let graph = gml::parse_gml(&graph_s,
+                               &|_| -> Option<()> { Some(()) },
+                               &|_| -> Option<()> { Some(()) })
+                    .unwrap();
     OwnedGraph::from_petgraph(&graph)
 }
 
@@ -74,15 +78,13 @@ impl GlobalContext {
         assert!(n_inputs > 0 && n_outputs > 0);
         let mut nodes = InnovationContainer::new();
         for _ in 0..n_inputs {
-            nodes.insert(self.node_innovation_counter.next().unwrap(), NodeGene {
-                node_type: NodeType::Input,
-            });
+            nodes.insert(self.node_innovation_counter.next().unwrap(),
+                         NodeGene { node_type: NodeType::Input });
         }
         assert!(nodes.len() == n_inputs);
         for _ in 0..n_outputs {
-            nodes.insert(self.node_innovation_counter.next().unwrap(), NodeGene {
-                node_type: NodeType::Output,
-            });
+            nodes.insert(self.node_innovation_counter.next().unwrap(),
+                         NodeGene { node_type: NodeType::Output });
         }
         assert!(nodes.len() == n_inputs + n_outputs);
         NetworkGenome {
@@ -97,9 +99,7 @@ const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
 fn main() {
-    let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph("examples/jeffress.gml"),
-    };
+    let fitness_evaluator = FitnessEvaluator { target_graph: load_graph("examples/jeffress.gml") };
     println!("{:?}", fitness_evaluator);
 
     // start with minimal random topology.
@@ -116,6 +116,6 @@ fn main() {
     }
     assert!(initial_pop.len() == POP_SIZE);
 
-
-
+    let rated = initial_pop.rate(&|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64));
+    println!("{:#?}", rated);
 }

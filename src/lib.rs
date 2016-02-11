@@ -9,6 +9,6 @@ mod selection;
 mod alignment;
 mod crossover;
 mod mate;
-mod fitness;
+pub mod fitness;
 pub mod population;
 pub mod network;

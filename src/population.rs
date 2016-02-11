@@ -15,7 +15,9 @@ pub struct Individual<T: Debug> {
 }
 
 pub trait Rating {}
+#[derive(Debug)]
 pub struct Rated;
+#[derive(Debug)]
 pub struct Unrated;
 
 impl Rating for Rated {}
