@@ -1,17 +1,9 @@
 use rand::{Rng, Closed01};
 use super::alignment::Alignment;
 use super::innovation::InnovationContainer;
+use super::is_probable;
 
-fn is_probable<R: Rng>(prob: &Closed01<f32>, rng: &mut R) -> bool {
-    if prob.0 < 1.0 {
-        let v: f32 = rng.gen(); // half open [0, 1)
-        debug_assert!(v >= 0.0 && v < 1.0);
-        v < prob.0
-    } else {
-        true
-    }
-}
-
+// XXX: Move to traits. Abstract InnovationContainer away.
 pub trait Crossover {
     /// Performs a crossover between `parent_left` and `parent_right`
     /// resulting in a single offspring. It can be assumed that

@@ -132,7 +132,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                                       tournament_k: usize,
                                       threshold: f64,
                                       compatibility: &C,
-                                      mate: &M,
+                                      mate: &mut M,
                                       rng: &mut R)
                                       -> (Population<T, Rated>, Population<T, Unrated>)
         where R: Rng,

@@ -16,5 +16,5 @@ pub trait Genotype: Send {}
 /// be used mutation only. Usually this is either crossover or mutation,
 /// or both.
 pub trait Mate<T: Genotype> {
-    fn mate<R: Rng>(&self, parent_left: &T, parent_right: &T, rng: &mut R) -> T;
+    fn mate<R: Rng>(&mut self, parent_left: &T, parent_right: &T, rng: &mut R) -> T;
 }

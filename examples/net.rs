@@ -4,14 +4,17 @@ extern crate graph_neighbor_matching;
 extern crate graph_io_gml as gml;
 
 use neat::population::{Population, Rated, Unrated, Individual};
-use neat::network::{NetworkGenome, NetworkGenomeDistance, LinkGeneListDistance, NodeGene, NodeType};
+use neat::network::{NetworkGenome, NetworkGenomeDistance, LinkGeneListDistance, LinkGene, NodeGene, NodeType};
 use neat::innovation::{Innovation, InnovationContainer};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
+use neat::crossover::ProbabilisticCrossover;
+use neat::is_probable;
 use graph_neighbor_matching::similarity_max_degree;
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use std::collections::BTreeMap;
 use rand::{Rng, Closed01};
+use rand::distributions::{WeightedChoice, Weighted, IndependentSample};
 
 fn load_graph(graph_file: &str) -> OwnedGraph {
     use std::fs::File;
@@ -61,20 +64,37 @@ impl FitnessEvaluator {
     }
 }
 
-struct GlobalContext {
+struct Environment {
     node_innovation_counter: Innovation,
     link_innovation_counter: Innovation,
     // (src_node, target_node) -> link_innovation
     link_innovation_cache: BTreeMap<(Innovation, Innovation), Innovation>,
 }
 
-impl GlobalContext {
-    fn new() -> GlobalContext {
-        GlobalContext {
+impl Environment {
+    fn new() -> Environment {
+        Environment {
             node_innovation_counter: Innovation::new(0),
             link_innovation_counter: Innovation::new(0),
             link_innovation_cache: BTreeMap::new(),
         }
+    }
+
+    fn mutate_add_connection<R: Rng>(&mut self, genome: &NetworkGenome, rng: &mut R) -> Option<NetworkGenome> { 
+        genome.find_unconnected_pair(rng).map(|(src, target)| {
+            println!("unconnected: {:?} {:?}", src, target);
+            // Add this link to the newly created genome
+            let new_link_gene = LinkGene {
+                source_node_gene: src,
+                target_node_gene: target,
+                weight: 0.0, // XXX: choose random weight!
+                active: true,
+            };
+            let mut offspring = genome.clone();
+            let new_link_innovation = self.new_link_innovation(src, target);
+            offspring.link_genes.insert(new_link_innovation, new_link_gene);
+            offspring
+        })
     }
 
     fn new_link_innovation(&mut self, source_node_gene: Innovation, target_node_gene: Innovation) -> Innovation {
@@ -113,15 +133,64 @@ const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
-struct Mater;
+#[derive(Debug, Copy, Clone)]
+enum RecombinationMethod {
+    MutateWeight,
+    MutateStructure,
+    Crossover,
+}
 
-impl Mate<NetworkGenome> for Mater {
-    fn mate<R: Rng>(&self,
+struct Mater<'a> {
+    w_mutate_weight: u32,
+    w_mutate_structure: u32,
+    w_crossover: u32,
+    env: &'a mut Environment,
+}
+
+impl<'a> Mate<NetworkGenome> for Mater<'a> {
+    // Add an argument that descibes whether both genomes are of equal fitness.
+    // Pass individual, which includes the fitness.
+    fn mate<R: Rng>(&mut self,
                     parent_left: &NetworkGenome,
                     parent_right: &NetworkGenome,
                     rng: &mut R)
                     -> NetworkGenome {
-        parent_left.clone()
+        assert!(self.w_mutate_weight + self.w_mutate_structure + self.w_crossover  > 0);
+        let mut items = [
+            Weighted{weight: self.w_mutate_weight, item: RecombinationMethod::MutateWeight},
+            Weighted{weight: self.w_mutate_structure, item: RecombinationMethod::MutateStructure},
+            Weighted{weight: self.w_crossover, item: RecombinationMethod::Crossover},
+        ];
+        let wc = WeightedChoice::new(&mut items);
+
+        match wc.ind_sample(rng) {
+            RecombinationMethod::MutateWeight => {
+                // TODO
+               parent_left.clone()
+            }
+            RecombinationMethod::MutateStructure => {
+                if is_probable(&Closed01(0.5), rng) {
+                    // AddConnection
+                    let offspring = self.env.mutate_add_connection(parent_left, rng).unwrap_or_else(|| parent_left.clone());
+                    offspring
+                } else {
+                    // AddNode (split existing connection)
+                    parent_left.clone()
+                }
+            }
+            RecombinationMethod::Crossover => {
+                let x = ProbabilisticCrossover {
+                    prob_match_left: Closed01(0.5), // NEAT always selects a random parent for matching genes
+                    prob_disjoint_left: Closed01(0.9),
+                    prob_excess_left: Closed01(0.9),
+                    prob_disjoint_right: Closed01(0.15),
+                    prob_excess_right: Closed01(0.15),
+                };
+
+                NetworkGenome::crossover(parent_left, parent_right, &x, rng)
+            }
+        }
+
     }
 }
 
@@ -132,16 +201,20 @@ fn main() {
     println!("{:?}", fitness_evaluator);
 
     // start with minimal random topology.
-    let mut ctx = GlobalContext::new();
+    let mut env = Environment::new();
 
-    let template_genome = ctx.generate_genome(INPUTS, OUTPUTS);
+    let template_genome = env.generate_genome(INPUTS, OUTPUTS);
 
     println!("{:#?}", template_genome);
 
     let mut initial_pop = Population::<_, Unrated>::new();
 
     for _ in 0..POP_SIZE {
-        initial_pop.add_genome(Box::new(template_genome.clone()));
+        // Add a single link gene! This is required, otherwise we can't determine
+        // correctly an InnovationRange.
+        let genome = env.mutate_add_connection(&template_genome, &mut rng).unwrap();
+
+        initial_pop.add_genome(Box::new(genome));
     }
     assert!(initial_pop.len() == POP_SIZE);
 
@@ -157,13 +230,20 @@ fn main() {
 
     println!("{:#?}", rated);
 
+    let mut mater = Mater {
+        w_mutate_weight: 0,
+        w_mutate_structure: 30,
+        w_crossover: 70,
+        env: &mut env,
+    };
+
     let (mut new_rated, new_unrated) = rated.produce_offspring(POP_SIZE,
                                                            Closed01(0.05),
                                                            Closed01(0.2),
                                                            3,
                                                            0.1, // threshold
                                                            &compatibility,
-                                                           &Mater,
+                                                           &mut mater,
                                                            &mut rng);
     let rated = new_unrated.rate_par(&|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64));
 
