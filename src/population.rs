@@ -6,6 +6,7 @@ use super::traits::Mate;
 use std::marker::PhantomData;
 use std::num::Zero;
 use std::fmt::Debug;
+use std::cmp;
 use rayon::par_iter::*;
 
 #[derive(Debug)]
@@ -185,13 +186,13 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                                                                            sorted_niche.compare_ij(i,j)
                                                                        },
                                                                        select_size,
-                                                                       tournament_k);
+                                                                       cmp::min(select_size, tournament_k));
                     let parent2 = selection::tournament_selection_fast(rng,
                                                                        |i, j| {
                                                                            sorted_niche.compare_ij(i,j)
                                                                        },
                                                                        select_size,
-                                                                       tournament_k);
+                                                                       cmp::min(select_size, tournament_k));
 
                     let offspring = mate.mate(&sorted_niche.individuals[parent1].genome,
                                               &sorted_niche.individuals[parent2].genome,
