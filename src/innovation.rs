@@ -30,16 +30,16 @@ impl Innovation {
         Innovation(n)
     }
 
-    pub fn is_within(&self, range: &InnovationRange) -> bool {
-        self >= &range.0 && self <= &range.1
-    }
-
     pub fn get(&self) -> usize {
         self.0
     }
 }
 
 impl InnovationRange {
+    pub fn contains(&self, innov: &Innovation) -> bool {
+        innov >= &self.0 && innov <= &self.1
+    }
+
     // NOTE: This requires that the iteration is in sorted order.
     fn from_sorted_iter<I>(mut iter: I) -> Option<InnovationRange>
         where I: Iterator<Item = Innovation> + DoubleEndedIterator<Item = Innovation>
@@ -96,7 +96,7 @@ impl<T> InnovationContainer<T> {
         let range_right = right.innovation_range();
 
         for (innov_left, gene_left) in self.map.iter() {
-            if innov_left.is_within(&range_right) {
+            if range_right.contains(innov_left) {
                 match right.get(innov_left) {
                     Some(gene_right) => f(*innov_left, Alignment::Match(gene_left, gene_right)),
                     None => f(*innov_left, Alignment::DisjointLeft(gene_left)),
@@ -107,7 +107,7 @@ impl<T> InnovationContainer<T> {
         }
 
         for (innov_right, gene_right) in right.map.iter() {
-            if innov_right.is_within(&range_left) {
+            if range_left.contains(innov_right) {
                 if !self.map.contains_key(innov_right) {
                     f(*innov_right, Alignment::DisjointRight(gene_right))
                 }
@@ -121,16 +121,16 @@ impl<T> InnovationContainer<T> {
 #[test]
 fn test_innovation() {
     let r = InnovationRange(Innovation(0), Innovation(100));
-    assert_eq!(true, Innovation(0).is_within(&r));
-    assert_eq!(true, Innovation(50).is_within(&r));
-    assert_eq!(true, Innovation(100).is_within(&r));
-    assert_eq!(false, Innovation(101).is_within(&r));
+    assert_eq!(true, r.contains(&Innovation(0)));
+    assert_eq!(true, r.contains(&Innovation(50)));
+    assert_eq!(true, r.contains(&Innovation(100)));
+    assert_eq!(false, r.contains(&Innovation(101)));
     let r = InnovationRange(Innovation(1), Innovation(100));
-    assert_eq!(false, Innovation(0).is_within(&r));
-    assert_eq!(true, Innovation(1).is_within(&r));
-    assert_eq!(true, Innovation(50).is_within(&r));
-    assert_eq!(true, Innovation(100).is_within(&r));
-    assert_eq!(false, Innovation(101).is_within(&r));
+    assert_eq!(false, r.contains(&Innovation(0)));
+    assert_eq!(true, r.contains(&Innovation(1)));
+    assert_eq!(true, r.contains(&Innovation(50)));
+    assert_eq!(true, r.contains(&Innovation(100)));
+    assert_eq!(false, r.contains(&Innovation(101)));
 }
 
 #[test]
