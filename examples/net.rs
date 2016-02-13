@@ -10,7 +10,7 @@ use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
 use neat::prob::is_probable;
-use graph_neighbor_matching::similarity_max_degree;
+use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, IgnoreNodeColors};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use std::collections::BTreeMap;
 use rand::{Rng, Closed01};
@@ -61,7 +61,9 @@ impl FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &NetworkGenome) -> f32 {
         let graph = genome_to_graph(genome);
-        similarity_max_degree(&graph, &self.target_graph, 50, 0.01).get()
+        let mut s = SimilarityMatrix::new(&graph, &self.target_graph, IgnoreNodeColors);
+        s.iterate(50, 0.01);
+        s.score_optimal_sum_norm(None, ScoreNorm::MaxDegree).get()
     }
 }
 
