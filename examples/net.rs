@@ -3,7 +3,7 @@ extern crate rand;
 extern crate graph_neighbor_matching;
 extern crate graph_io_gml as gml;
 
-use neat::population::{Population, Rated, Unrated, Individual};
+use neat::population::{Population, Rated, Unrated, Individual, Runner};
 use neat::network::{NetworkGenome, NetworkGenomeDistance, LinkGeneListDistance, LinkGene, NodeGene, NodeType};
 use neat::innovation::{Innovation, InnovationContainer};
 use neat::fitness::Fitness;
@@ -15,6 +15,7 @@ use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use std::collections::BTreeMap;
 use rand::{Rng, Closed01};
 use rand::distributions::{WeightedChoice, Weighted, IndependentSample};
+use std::marker::PhantomData;
 
 fn load_graph(graph_file: &str) -> OwnedGraph {
     use std::fs::File;
@@ -266,7 +267,12 @@ fn main() {
     }
     assert!(initial_pop.len() == POP_SIZE);
 
-    let rated = initial_pop.rate_par(&|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64));
+    let mut mater = Mater {
+        w_mutate_weight: 0,
+        w_mutate_structure: 30,
+        w_crossover: 70,
+        env: &mut env,
+    };
 
     let compatibility = NetworkGenomeDistance {
         l: LinkGeneListDistance {
@@ -276,26 +282,18 @@ fn main() {
         },
     };
 
-    println!("{:#?}", rated);
-
-    let mut mater = Mater {
-        w_mutate_weight: 0,
-        w_mutate_structure: 30,
-        w_crossover: 70,
-        env: &mut env,
+    let mut runner = Runner {
+        pop_size: POP_SIZE,
+        elite_percentage: Closed01(0.05),
+        selection_percentage: Closed01(0.2),
+        tournament_k: 3,
+        compatibility_threshold: 5.5,
+        compatibility: &compatibility,
+        mate: &mut mater,
+        fitness: &|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64),
+        _marker: PhantomData,
     };
 
-    let (mut new_rated, new_unrated) = rated.produce_offspring(POP_SIZE,
-                                                           Closed01(0.05),
-                                                           Closed01(0.2),
-                                                           3,
-                                                           0.1, // threshold
-                                                           &compatibility,
-                                                           &mut mater,
-                                                           &mut rng);
-    let rated = new_unrated.rate_par(&|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64));
-
-    new_rated.merge(rated, None);
-
-    println!("{:#?}", new_rated);
+    let new_pop = runner.run(initial_pop, &|iter, _| iter > 5, &mut rng);
+    println!("{:#?}", new_pop);
 }

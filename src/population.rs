@@ -131,7 +131,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                                       // reproduction?
                                       selection_percentage: Closed01<f64>,
                                       tournament_k: usize,
-                                      threshold: f64,
+                                      compatibility_threshold: f64,
                                       compatibility: &C,
                                       mate: &mut M,
                                       rng: &mut R)
@@ -140,10 +140,15 @@ impl<T: Genotype + Debug> Population<T, Rated> {
               C: Distance<T>,
               M: Mate<T>
     {
+        println!("population size: {}", self.len());
+
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
         assert!(self.len() > 0);
-        let niches = self.partition(rng, threshold, compatibility);
+        let niches = self.partition(rng, compatibility_threshold, compatibility);
         let num_niches = niches.len();
+
+        println!("niches: {}", num_niches);
+
         assert!(num_niches > 0);
         let total_mean: Fitness = niches.iter().map(|ind| ind.mean_fitness()).sum();
         assert!(total_mean.get() >= 0.0);
@@ -166,15 +171,20 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             let niche_size = pop_size as f64 * percentage_of_population;
 
             // number of elitary individuals to copy from the old niche generation into the new.
-            let elite_size = (niche_size * elite_percentage.0).round() as usize;
+            let elite_size = cmp::max(1, (niche_size * elite_percentage.0).round() as usize);
+            // println!("elite_size: {}", elite_size);
 
             // number of offspring to produce.
             let offspring_size = (niche_size * (1.0 - elite_percentage.0)).round() as usize;
+            // println!("offspring_size: {}", offspring_size);
 
             // number of the best individuals to use for mating.
             let select_size = (niche_size * selection_percentage.0).round() as usize;
+            // println!("select_size: {}", select_size);
 
             let sorted_niche = niche.sort();
+
+            let select_size = cmp::min(select_size, sorted_niche.len());
 
             // at first produce ```offspring_size``` individuals from the top ```select_size```
             // individuals.
@@ -215,7 +225,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     // Partitions the whole population into species (niches)
     fn partition<R, C>(self,
                        rng: &mut R,
-                       threshold: f64,
+                       compatibility_threshold: f64,
                        compatibility: &C)
                        -> Vec<Population<T, Rated>>
         where R: Rng,
@@ -227,7 +237,9 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             for niche in niches.iter_mut() {
                 // Is this genome compatible with this niche? Test against a random genome.
                 let compatible = match rng.choose(&niche.individuals) {
-                    Some(probe) => compatibility.distance(&probe.genome, &ind.genome) < threshold,
+                    Some(probe) => {
+                        compatibility.distance(&probe.genome, &ind.genome) < compatibility_threshold
+                    }
                     // If a niche is empty, a genome always is compatible (note that a niche can't be empyt)
                     None => true,
                 };
@@ -243,5 +255,63 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         }
 
         niches
+    }
+}
+
+pub struct Runner<'a, T, C, M, F>
+    where T: Genotype + Debug,
+          C: Distance<T> + 'a,
+          M: Mate<T> + 'a,
+          F: Sync + Fn(&T) -> Fitness + 'a
+{
+    // anticipated population size
+    pub pop_size: usize,
+    // how many of the best individuals of a niche are copied as-is into the
+    // new population?
+    pub elite_percentage: Closed01<f64>,
+    // how many of the best individuals of a niche are selected for
+    // reproduction?
+    pub selection_percentage: Closed01<f64>,
+    pub tournament_k: usize,
+    pub compatibility_threshold: f64,
+    pub compatibility: &'a C,
+    pub mate: &'a mut M,
+    pub fitness: &'a F,
+    pub _marker: PhantomData<T>,
+}
+
+impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
+    where T: Genotype + Debug,
+          C: Distance<T> + 'a,
+          M: Mate<T> + 'a,
+          F: Sync + Fn(&T) -> Fitness + 'a
+{
+    pub fn run<R, G>(&mut self,
+                     initial_pop: Population<T, Unrated>,
+                     goal_condition: &G,
+                     rng: &mut R)
+                     -> (usize, Population<T, Rated>)
+        where R: Rng,
+              G: Fn(usize, &Population<T, Rated>) -> bool
+    {
+        let mut iteration: usize = 0;
+        let mut current_rated_pop = initial_pop.rate_par(self.fitness);
+
+        while !goal_condition(iteration, &current_rated_pop) {
+            let (new_rated, new_unrated) =
+                current_rated_pop.produce_offspring(self.pop_size,
+                                                    Closed01(self.elite_percentage.0),
+                                                    Closed01(self.selection_percentage.0),
+                                                    self.tournament_k,
+                                                    self.compatibility_threshold,
+                                                    self.compatibility,
+                                                    self.mate,
+                                                    rng);
+
+            current_rated_pop = new_rated;
+            current_rated_pop.merge(new_unrated.rate_par(self.fitness), None);
+        }
+
+        return (iteration, current_rated_pop);
     }
 }
