@@ -102,8 +102,13 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         sum / Fitness::new(self.len() as f64)
     }
 
-    fn sort(mut self) -> Self {
-        (&mut self.individuals).sort_by(|a, b| a.fitness.cmp(&b.fitness));
+    pub fn max_fitness(&self) -> Option<Fitness> {
+        self.individuals.iter().max_by_key(|ind| ind.fitness).map(|i| i.fitness)
+    }
+
+    // higher value of fitness means that the individual is fitter.
+    pub fn sort(mut self) -> Self {
+        (&mut self.individuals).sort_by(|a, b| a.fitness.cmp(&b.fitness).reverse());
         self
     }
 
@@ -316,6 +321,7 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
 
             current_rated_pop = new_rated;
             current_rated_pop.merge(new_unrated.rate_par(self.fitness), None);
+            iteration += 1;
         }
 
         return (iteration, current_rated_pop);

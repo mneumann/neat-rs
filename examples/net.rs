@@ -61,7 +61,7 @@ impl FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &NetworkGenome) -> f32 {
         let graph = genome_to_graph(genome);
-        similarity_max_degree(&graph, &self.target_graph, 20, 0.05).get()
+        similarity_max_degree(&graph, &self.target_graph, 50, 0.01).get()
     }
 }
 
@@ -287,13 +287,19 @@ fn main() {
         elite_percentage: Closed01(0.05),
         selection_percentage: Closed01(0.2),
         tournament_k: 3,
-        compatibility_threshold: 5.5,
+        compatibility_threshold: 1.0,
         compatibility: &compatibility,
         mate: &mut mater,
         fitness: &|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64),
         _marker: PhantomData,
     };
 
-    let new_pop = runner.run(initial_pop, &|iter, _| iter > 5, &mut rng);
+    let (iter, new_pop) = runner.run(initial_pop, &|iter, pop| {
+        iter >= 100 || pop.max_fitness().unwrap().get() > 0.99
+    }, &mut rng);
+
+    let new_pop = new_pop.sort();
+
+    println!("iter: {}", iter);
     println!("{:#?}", new_pop);
 }
