@@ -5,7 +5,10 @@ use super::alignment::Alignment;
 pub struct Innovation(usize);
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct InnovationRange(Innovation, Innovation);
+pub enum InnovationRange {
+    FromTo(Innovation, Innovation), // inclusive end
+    Empty,
+}
 
 #[derive(Debug, Clone)]
 pub struct InnovationContainer<T> {
@@ -37,19 +40,24 @@ impl Innovation {
 
 impl InnovationRange {
     pub fn contains(&self, innov: &Innovation) -> bool {
-        innov >= &self.0 && innov <= &self.1
+        match *self {
+            InnovationRange::FromTo(ref a, ref b) => innov >= a && innov <= b,
+            InnovationRange::Empty => false,
+        }
     }
 
     // NOTE: This requires that the iteration is in sorted order.
-    fn from_sorted_iter<I>(mut iter: I) -> Option<InnovationRange>
+    fn from_sorted_iter<I>(mut iter: I) -> InnovationRange
         where I: Iterator<Item = Innovation> + DoubleEndedIterator<Item = Innovation>
     {
-        iter.next().map(|min| {
-            match iter.next_back() {
-                Some(max) => InnovationRange(min, max),
-                None => InnovationRange(min, min),
-            }
-        })
+        iter.next()
+            .map(|min| {
+                match iter.next_back() {
+                    Some(max) => InnovationRange::FromTo(min, max),
+                    None => InnovationRange::FromTo(min, min),
+                }
+            })
+            .unwrap_or(InnovationRange::Empty)
     }
 }
 
@@ -78,7 +86,7 @@ impl<T> InnovationContainer<T> {
 
     // Returns the min and max innovation numbers (inclusive)
     pub fn innovation_range(&self) -> InnovationRange {
-        InnovationRange::from_sorted_iter(self.map.keys().cloned()).unwrap()
+        InnovationRange::from_sorted_iter(self.map.keys().cloned())
     }
 
     fn align_as_container<'a>(&'a self,
@@ -120,12 +128,12 @@ impl<T> InnovationContainer<T> {
 
 #[test]
 fn test_innovation() {
-    let r = InnovationRange(Innovation(0), Innovation(100));
+    let r = InnovationRange::FromTo(Innovation(0), Innovation(100));
     assert_eq!(true, r.contains(&Innovation(0)));
     assert_eq!(true, r.contains(&Innovation(50)));
     assert_eq!(true, r.contains(&Innovation(100)));
     assert_eq!(false, r.contains(&Innovation(101)));
-    let r = InnovationRange(Innovation(1), Innovation(100));
+    let r = InnovationRange::FromTo(Innovation(1), Innovation(100));
     assert_eq!(false, r.contains(&Innovation(0)));
     assert_eq!(true, r.contains(&Innovation(1)));
     assert_eq!(true, r.contains(&Innovation(50)));
@@ -137,16 +145,16 @@ fn test_innovation() {
 fn test_innovation_range() {
     let mut genome = InnovationContainer::new();
     genome.insert(Innovation(50), ());
-    assert_eq!(InnovationRange(Innovation(50), Innovation(50)),
+    assert_eq!(InnovationRange::FromTo(Innovation(50), Innovation(50)),
                genome.innovation_range());
     genome.insert(Innovation(20), ());
-    assert_eq!(InnovationRange(Innovation(20), Innovation(50)),
+    assert_eq!(InnovationRange::FromTo(Innovation(20), Innovation(50)),
                genome.innovation_range());
     genome.insert(Innovation(100), ());
-    assert_eq!(InnovationRange(Innovation(20), Innovation(100)),
+    assert_eq!(InnovationRange::FromTo(Innovation(20), Innovation(100)),
                genome.innovation_range());
     genome.insert(Innovation(0), ());
-    assert_eq!(InnovationRange(Innovation(0), Innovation(100)),
+    assert_eq!(InnovationRange::FromTo(Innovation(0), Innovation(100)),
                genome.innovation_range());
 }
 
