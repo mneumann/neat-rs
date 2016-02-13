@@ -9,7 +9,7 @@ use neat::innovation::{Innovation, InnovationContainer};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
-use neat::is_probable;
+use neat::prob::is_probable;
 use graph_neighbor_matching::similarity_max_degree;
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use std::collections::BTreeMap;

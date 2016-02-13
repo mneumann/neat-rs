@@ -1,7 +1,7 @@
 use rand::{Rng, Closed01};
 use super::alignment::Alignment;
 use super::innovation::InnovationContainer;
-use super::is_probable;
+use super::prob::is_probable;
 
 // XXX: Move to traits. Abstract InnovationContainer away.
 pub trait Crossover {

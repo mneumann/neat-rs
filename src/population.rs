@@ -8,6 +8,7 @@ use std::num::Zero;
 use std::fmt::Debug;
 use std::cmp;
 use rayon::par_iter::*;
+use super::prob::probabilistic_round;
 
 #[derive(Debug)]
 pub struct Individual<T: Debug> {
@@ -171,15 +172,20 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             let niche_size = pop_size as f64 * percentage_of_population;
 
             // number of elitary individuals to copy from the old niche generation into the new.
-            let elite_size = cmp::max(1, (niche_size * elite_percentage.0).round() as usize);
+            let elite_size =
+                cmp::max(1,
+                         probabilistic_round(niche_size * elite_percentage.0, rng) as usize);
             // println!("elite_size: {}", elite_size);
 
             // number of offspring to produce.
-            let offspring_size = (niche_size * (1.0 - elite_percentage.0)).round() as usize;
+            let offspring_size = probabilistic_round(niche_size * (1.0 - elite_percentage.0),
+                                                     rng) as usize;
             // println!("offspring_size: {}", offspring_size);
 
             // number of the best individuals to use for mating.
-            let select_size = (niche_size * selection_percentage.0).round() as usize;
+            let select_size = probabilistic_round(niche_size *
+                                                  selection_percentage.0,
+                                                  rng) as usize;
             // println!("select_size: {}", select_size);
 
             let sorted_niche = niche.sort();
