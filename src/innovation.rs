@@ -64,8 +64,12 @@ impl<T> InnovationContainer<T> {
         self.map.insert(innov, data);
     }
 
-    fn get(&self, innov: &Innovation) -> Option<&T> {
+    pub fn get(&self, innov: &Innovation) -> Option<&T> {
         self.map.get(innov)
+    }
+
+    pub fn get_mut(&mut self, innov: &Innovation) -> Option<&mut T> {
+        self.map.get_mut(innov)
     }
 
     pub fn len(&self) -> usize {

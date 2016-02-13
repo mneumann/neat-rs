@@ -31,6 +31,13 @@ pub struct LinkGene {
     pub active: bool,
 }
 
+impl LinkGene {
+    pub fn disable(&mut self) {
+        assert!(self.active);
+        self.active = false;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct NetworkGenome {
     pub link_genes: InnovationContainer<LinkGene>,
@@ -149,26 +156,31 @@ impl NetworkGenome {
         (adj_matrix, rev_map)
     }
 
+    /// Returns a random link gene innovation which is active. Or None if no such exists.
+    pub fn find_random_active_link_gene<R: Rng>(&self, rng: &mut R) -> Option<Innovation> {
+        let mut all_active_link_innovations = Vec::with_capacity(self.link_genes.len());
+        for (&innov, link) in self.link_genes.map.iter() {
+            if link.active {
+                all_active_link_innovations.push(innov);
+            }
+        }
+        rng.choose(&all_active_link_innovations).map(|&i| i)
+    }
+
     /// Returns two node innvovations which are not yet connected and which does not
     /// create a cycle, or None if no such exists.
     pub fn find_unconnected_pair<R: Rng>(&self, rng: &mut R) -> Option<(Innovation, Innovation)> {
-        println!("find_unconnected_pair");
         // Construct binary adjacency matrix
         let (adj_matrix, rev_map) = self.adjacency_matrix();
-        println!("adj_matrix: {:?}", adj_matrix);
 
         // generate the transitive closure.
         let transitive_closure = adj_matrix.clone().transitive_closure();
-        println!("tranitive_closure: {:?}", transitive_closure);
 
         // Construct an array of all currently unconnected nodes.
         let unconnected = adj_matrix.unconnected_pairs_no_cycle();
-        println!("unconnected: {:?}", unconnected);
 
         // Out of all unconnected pairs, choose a random one.
         rng.choose(&unconnected).map(|&(src, target)| {
-            println!("A unconnected: {:?} {:?}", src, target);
-
             // reverse map src and target to the node innovation
             let src_innovation = rev_map[src].unwrap();
             let target_innovation = rev_map[target].unwrap();

@@ -186,13 +186,15 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                                                                            sorted_niche.compare_ij(i,j)
                                                                        },
                                                                        select_size,
-                                                                       cmp::min(select_size, tournament_k));
+                                                                       cmp::min(select_size,
+                                                                                tournament_k));
                     let parent2 = selection::tournament_selection_fast(rng,
                                                                        |i, j| {
                                                                            sorted_niche.compare_ij(i,j)
                                                                        },
                                                                        select_size,
-                                                                       cmp::min(select_size, tournament_k));
+                                                                       cmp::min(select_size,
+                                                                                tournament_k));
 
                     let offspring = mate.mate(&sorted_niche.individuals[parent1].genome,
                                               &sorted_niche.individuals[parent2].genome,

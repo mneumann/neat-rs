@@ -80,21 +80,64 @@ impl Environment {
         }
     }
 
+    fn random_link_weight<R: Rng>(&mut self, rng: &mut R) -> f64 {
+        // XXX Choose a weight between -1 and 1?
+        rng.gen()
+    }
+
+    fn insert_new_link<R: Rng>(&mut self, genome: &mut NetworkGenome, source_node: Innovation, target_node: Innovation, rng: &mut R) {
+        let link_gene = LinkGene {
+            source_node_gene: source_node,
+            target_node_gene: target_node,
+            weight: self.random_link_weight(rng),
+            active: true,
+        };
+        self.insert_new_link_gene(genome, link_gene);
+    }
+
+    fn insert_new_link_gene(&mut self, genome: &mut NetworkGenome, link_gene: LinkGene) {
+        let new_link_innovation = self.new_link_innovation(link_gene.source_node_gene, link_gene.target_node_gene);
+        genome.link_genes.insert(new_link_innovation, link_gene);
+    }
+
     fn mutate_add_connection<R: Rng>(&mut self, genome: &NetworkGenome, rng: &mut R) -> Option<NetworkGenome> { 
         genome.find_unconnected_pair(rng).map(|(src, target)| {
-            println!("unconnected: {:?} {:?}", src, target);
-            // Add this link to the newly created genome
-            let new_link_gene = LinkGene {
-                source_node_gene: src,
-                target_node_gene: target,
-                weight: 0.0, // XXX: choose random weight!
-                active: true,
-            };
             let mut offspring = genome.clone();
-            let new_link_innovation = self.new_link_innovation(src, target);
-            offspring.link_genes.insert(new_link_innovation, new_link_gene);
+            // Add new link to the offspring genome
+            self.insert_new_link(&mut offspring, src, target, rng);
             offspring
         })
+    }
+
+    /// choose a random link. split it in half.
+    fn mutate_add_node<R: Rng>(&mut self, genome: &NetworkGenome, rng: &mut R) -> Option<NetworkGenome> {
+        if let Some(link_innov) = genome.find_random_active_link_gene(rng) {
+            // split link in half.
+            let mut offspring = genome.clone();
+            let new_node_innovation = self.new_node_innovation();
+            // add new node
+            offspring.node_genes.insert(new_node_innovation, NodeGene{node_type: NodeType::Hidden});
+            // disable `link_innov` in offspring
+            // we keep this gene (but disable it), because this allows us to have a structurally
+            // compatible genome to the old one, as disabled genes are taken into account for
+            // the genomic distance measure.
+            offspring.link_genes.get_mut(&link_innov).unwrap().disable();
+            // add two new link innovations with the new node in the middle.
+            // XXX: Choose random weights? Or split weight? We use random weights for now.
+            let (orig_src_node, orig_target_node) = {
+                let orig_link = offspring.link_genes.get(&link_innov).unwrap();
+                (orig_link.source_node_gene, orig_link.target_node_gene)
+            };
+            self.insert_new_link(&mut offspring, orig_src_node, new_node_innovation, rng);
+            self.insert_new_link(&mut offspring, new_node_innovation, orig_target_node, rng);
+            Some(offspring)
+        } else {
+            None
+        }
+    }
+
+    fn new_node_innovation(&mut self) -> Innovation {
+        self.node_innovation_counter.next().unwrap()
     }
 
     fn new_link_innovation(&mut self, source_node_gene: Innovation, target_node_gene: Innovation) -> Innovation {
@@ -171,11 +214,16 @@ impl<'a> Mate<NetworkGenome> for Mater<'a> {
             RecombinationMethod::MutateStructure => {
                 if is_probable(&Closed01(0.5), rng) {
                     // AddConnection
-                    let offspring = self.env.mutate_add_connection(parent_left, rng).unwrap_or_else(|| parent_left.clone());
+                    let offspring = self.env.mutate_add_connection(parent_left, rng).
+                        or_else(|| self.env.mutate_add_connection(parent_right, rng)).
+                        unwrap_or_else(|| parent_left.clone());
                     offspring
                 } else {
                     // AddNode (split existing connection)
-                    parent_left.clone()
+                    let offspring = self.env.mutate_add_node(parent_left, rng).
+                        or_else(|| self.env.mutate_add_node(parent_right, rng)).
+                        unwrap_or_else(|| parent_left.clone());
+                    offspring
                 }
             }
             RecombinationMethod::Crossover => {
