@@ -230,15 +230,15 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
         }
     }
 
-    fn add_link<R: Rng>(&mut self,
-                        genome: &mut NetworkGenome,
-                        source_node: Innovation,
-                        target_node: Innovation,
-                        rng: &mut R) {
+    fn add_link(&mut self,
+                genome: &mut NetworkGenome,
+                source_node: Innovation,
+                target_node: Innovation,
+                weight: f64) {
         let link_gene = LinkGene {
             source_node_gene: source_node,
             target_node_gene: target_node,
-            weight: LINK::random_link_weight(rng),
+            weight: weight,
             active: true,
         };
         self.add_link_gene(genome, link_gene);
@@ -274,7 +274,7 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
         genome.find_random_unconnected_pair(rng).map(|(src, target)| {
             let mut offspring = genome.clone();
             // Add new link to the offspring genome
-            self.add_link(&mut offspring, src, target, rng);
+            self.add_link(&mut offspring, src, target, LINK::random_link_weight(rng));
             offspring
         })
     }
@@ -302,8 +302,14 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
                 let orig_link = offspring.link_genes.get(&link_innov).unwrap();
                 (orig_link.source_node_gene, orig_link.target_node_gene)
             };
-            self.add_link(&mut offspring, orig_src_node, new_node_innovation, rng);
-            self.add_link(&mut offspring, new_node_innovation, orig_target_node, rng);
+            self.add_link(&mut offspring,
+                          orig_src_node,
+                          new_node_innovation,
+                          LINK::random_link_weight(rng));
+            self.add_link(&mut offspring,
+                          new_node_innovation,
+                          orig_target_node,
+                          LINK::random_link_weight(rng));
             offspring
         })
     }
