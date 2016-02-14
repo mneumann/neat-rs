@@ -5,7 +5,8 @@ extern crate graph_io_gml as gml;
 extern crate closed01;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::network::{NetworkGenome, NetworkGenomeDistance, LinkGeneListDistance, NodeType, Environment, LinkWeightStrategy};
+use neat::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment,
+                    LinkWeightStrategy};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
@@ -29,14 +30,16 @@ fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
 
     let graph = gml::parse_gml(&graph_s,
                                &|sexp| -> Option<NodeType> {
-                                   sexp.and_then(|se| se.get_str().map(|s|
-                                        match s {
-                                            "input" => NodeType::Input,
-                                            "output" => NodeType::Output,
-                                            "hidden" => NodeType::Hidden,
-                                            _ => panic!("Invalid node type/weight"),
-                                        }
-                                   ))
+                                   sexp.and_then(|se| {
+                                       se.get_str().map(|s| {
+                                           match s {
+                                               "input" => NodeType::Input,
+                                               "output" => NodeType::Output,
+                                               "hidden" => NodeType::Hidden,
+                                               _ => panic!("Invalid node type/weight"),
+                                           }
+                                       })
+                                   })
                                },
                                &|_| -> Option<()> { Some(()) })
                     .unwrap();
@@ -69,7 +72,10 @@ struct FitnessEvaluator {
 struct NodeColors;
 
 impl NodeColorMatching<NodeType> for NodeColors {
-    fn node_color_matching(&self, node_i_value: &NodeType, node_j_value: &NodeType) -> closed01::Closed01<f32> {
+    fn node_color_matching(&self,
+                           node_i_value: &NodeType,
+                           node_j_value: &NodeType)
+                           -> closed01::Closed01<f32> {
         if node_i_value == node_j_value {
             closed01::Closed01::one()
         } else {
@@ -91,8 +97,7 @@ impl FitnessEvaluator {
 #[derive(Debug)]
 struct LinkWeightS;
 
-impl LinkWeightStrategy for LinkWeightS {
-}
+impl LinkWeightStrategy for LinkWeightS {}
 
 const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
@@ -105,7 +110,7 @@ enum RecombinationMethod {
     Crossover,
 }
 
-struct Mater<'a, T: LinkWeightStrategy+'a> {
+struct Mater<'a, T: LinkWeightStrategy + 'a> {
     w_mutate_weight: u32,
     w_mutate_structure: u32,
     w_crossover: u32,
@@ -120,37 +125,48 @@ impl<'a, T: LinkWeightStrategy> Mate<NetworkGenome> for Mater<'a, T> {
                     parent_right: &NetworkGenome,
                     rng: &mut R)
                     -> NetworkGenome {
-        assert!(self.w_mutate_weight + self.w_mutate_structure + self.w_crossover  > 0);
-        let mut items = [
-            Weighted{weight: self.w_mutate_weight, item: RecombinationMethod::MutateWeight},
-            Weighted{weight: self.w_mutate_structure, item: RecombinationMethod::MutateStructure},
-            Weighted{weight: self.w_crossover, item: RecombinationMethod::Crossover},
-        ];
+        assert!(self.w_mutate_weight + self.w_mutate_structure + self.w_crossover > 0);
+        let mut items = [Weighted {
+                             weight: self.w_mutate_weight,
+                             item: RecombinationMethod::MutateWeight,
+                         },
+                         Weighted {
+                             weight: self.w_mutate_structure,
+                             item: RecombinationMethod::MutateStructure,
+                         },
+                         Weighted {
+                             weight: self.w_crossover,
+                             item: RecombinationMethod::Crossover,
+                         }];
         let wc = WeightedChoice::new(&mut items);
 
         match wc.ind_sample(rng) {
             RecombinationMethod::MutateWeight => {
                 // TODO
-               parent_left.clone()
+                parent_left.clone()
             }
             RecombinationMethod::MutateStructure => {
                 if is_probable(&Closed01(0.5), rng) {
                     // AddConnection
-                    let offspring = self.env.mutate_add_connection(parent_left, rng).
-                        or_else(|| self.env.mutate_add_connection(parent_right, rng)).
-                        unwrap_or_else(|| parent_left.clone());
+                    let offspring = self.env
+                                        .mutate_add_connection(parent_left, rng)
+                                        .or_else(|| {
+                                            self.env.mutate_add_connection(parent_right, rng)
+                                        })
+                                        .unwrap_or_else(|| parent_left.clone());
                     offspring
                 } else {
                     // AddNode (split existing connection)
-                    let offspring = self.env.mutate_add_node(parent_left, rng).
-                        or_else(|| self.env.mutate_add_node(parent_right, rng)).
-                        unwrap_or_else(|| parent_left.clone());
+                    let offspring = self.env
+                                        .mutate_add_node(parent_left, rng)
+                                        .or_else(|| self.env.mutate_add_node(parent_right, rng))
+                                        .unwrap_or_else(|| parent_left.clone());
                     offspring
                 }
             }
             RecombinationMethod::Crossover => {
                 let x = ProbabilisticCrossover {
-                    prob_match_left: Closed01(0.5), // NEAT always selects a random parent for matching genes
+                    prob_match_left: Closed01(0.5), /* NEAT always selects a random parent for matching genes */
                     prob_disjoint_left: Closed01(0.9),
                     prob_excess_left: Closed01(0.9),
                     prob_disjoint_right: Closed01(0.15),
@@ -196,11 +212,9 @@ fn main() {
     };
 
     let compatibility = NetworkGenomeDistance {
-        l: LinkGeneListDistance {
-            excess: 1.0,
-            disjoint: 1.0,
-            weight: 0.0,
-        },
+        excess: 1.0,
+        disjoint: 1.0,
+        weight: 0.0,
     };
 
     let mut runner = Runner {
@@ -215,9 +229,11 @@ fn main() {
         _marker: PhantomData,
     };
 
-    let (iter, new_pop) = runner.run(initial_pop, &|iter, pop| {
-        iter >= 100 || pop.max_fitness().unwrap().get() > 0.99
-    }, &mut rng);
+    let (iter, new_pop) = runner.run(initial_pop,
+                                     &|iter, pop| {
+                                         iter >= 100 || pop.max_fitness().unwrap().get() > 0.99
+                                     },
+                                     &mut rng);
 
     let new_pop = new_pop.sort();
 

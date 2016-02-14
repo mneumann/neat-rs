@@ -38,10 +38,50 @@ pub struct LinkGene {
     pub active: bool,
 }
 
+struct LinkGeneAlignmentMeasure {
+    matching: usize,
+    disjoint: usize,
+    excess: usize,
+    weight_distance: f64,
+}
+
 impl LinkGene {
     pub fn disable(&mut self) {
         assert!(self.active);
         self.active = false;
+    }
+
+    fn count_alignment_and_weight_distance(genes_left: &InnovationContainer<Self>,
+                                           genes_right: &InnovationContainer<Self>)
+                                           -> LinkGeneAlignmentMeasure {
+
+        let mut m = LinkGeneAlignmentMeasure {
+            matching: 0,
+            disjoint: 0,
+            excess: 0,
+            weight_distance: 0.0,
+        };
+
+        genes_left.align(genes_right,
+                         &mut |_, alignment| {
+                             match alignment {
+                                 Alignment::Match(gene_left, gene_right) => {
+                                     m.matching += 1;
+                                     m.weight_distance += (gene_left.weight - gene_right.weight)
+                                                              .abs();
+                                 }
+                                 Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
+                                     m.disjoint += 1;
+                                 }
+                                 Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
+                                     m.excess += 1;
+                                 }
+                             }
+                         });
+
+        assert!(2 * m.matching + m.disjoint + m.excess == genes_left.len() + genes_right.len());
+
+        return m;
     }
 }
 
@@ -50,6 +90,8 @@ pub struct NetworkGenome {
     pub link_genes: InnovationContainer<LinkGene>,
     pub node_genes: InnovationContainer<NodeGene>,
 }
+
+impl Genotype for NetworkGenome {}
 
 impl NetworkGenome {
     // Uses the crossover method C to recombine left and right.
@@ -132,75 +174,33 @@ impl NetworkGenome {
     }
 }
 
-impl Genotype for NetworkGenome {}
 
-struct LinkGeneWeightDistance;
-
-impl Distance<LinkGene> for LinkGeneWeightDistance {
-    fn distance(&self, a: &LinkGene, b: &LinkGene) -> f64 {
-        a.weight - b.weight
-    }
-}
-
-pub struct LinkGeneListDistance {
+pub struct NetworkGenomeDistance {
     pub excess: f64,
     pub disjoint: f64,
     pub weight: f64,
 }
 
-impl Distance<InnovationContainer<LinkGene>> for LinkGeneListDistance {
-    fn distance(&self,
-                genes_left: &InnovationContainer<LinkGene>,
-                genes_right: &InnovationContainer<LinkGene>)
-                -> f64 {
+impl Distance<NetworkGenome> for NetworkGenomeDistance {
+    fn distance(&self, genome_left: &NetworkGenome, genome_right: &NetworkGenome) -> f64 {
+        let genes_left = &genome_left.link_genes;
+        let genes_right = &genome_right.link_genes;
+
         let max_len = cmp::max(genes_left.len(), genes_right.len());
         if max_len == 0 {
             return 0.0;
         }
 
-        let mut matching = 0;
-        let mut disjoint = 0;
-        let mut excess = 0;
-        let mut weight_dist = 0.0;
+        let m = LinkGene::count_alignment_and_weight_distance(genes_left, genes_right);
 
-        genes_left.align(genes_right,
-                         &mut |_, alignment| {
-                             match alignment {
-                                 Alignment::Match(gene_left, gene_right) => {
-                                     matching += 1;
-                                     weight_dist += LinkGeneWeightDistance.distance(gene_left,
-                                                                                    gene_right)
-                                                                          .abs();
-                                 }
-                                 Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
-                                     disjoint += 1;
-                                 }
-                                 Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
-                                     excess += 1;
-                                 }
-                             }
-                         });
-
-        assert!(2 * matching + disjoint + excess == genes_left.len() + genes_right.len());
-
-        self.excess * (excess as f64) / (max_len as f64) +
-        self.disjoint * (disjoint as f64) / (max_len as f64) +
+        self.excess * (m.excess as f64) / (max_len as f64) +
+        self.disjoint * (m.disjoint as f64) / (max_len as f64) +
         self.weight *
-        if matching > 0 {
-            weight_dist / (matching as f64)
+        if m.matching > 0 {
+            m.weight_distance / (m.matching as f64)
         } else {
             0.0
         }
-    }
-}
-
-pub struct NetworkGenomeDistance {
-    pub l: LinkGeneListDistance,
-}
-
-impl Distance<NetworkGenome> for NetworkGenomeDistance {
-    fn distance(&self, genome_left: &NetworkGenome, genome_right: &NetworkGenome) -> f64 {
-        self.l.distance(&genome_left.link_genes, &genome_right.link_genes)
     }
 }
 
