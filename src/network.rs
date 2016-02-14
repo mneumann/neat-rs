@@ -6,6 +6,7 @@ use super::crossover::Crossover;
 use rand::Rng;
 use std::collections::BTreeMap;
 use super::adj_matrix::AdjMatrix;
+use std::marker::PhantomData;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NodeType {
@@ -203,26 +204,30 @@ impl Distance<NetworkGenome> for NetworkGenomeDistance {
     }
 }
 
-pub struct Environment {
+pub trait LinkWeightStrategy {
+    fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
+        // XXX Choose a weight between -1 and 1?
+        rng.gen()
+    }
+}
+
+#[derive(Debug)]
+pub struct Environment<LINK: LinkWeightStrategy> {
     node_innovation_counter: Innovation,
     link_innovation_counter: Innovation,
     // (src_node, target_node) -> link_innovation
     link_innovation_cache: BTreeMap<(Innovation, Innovation), Innovation>,
+    _marker_link: PhantomData<LINK>,
 }
 
-impl Environment {
-    pub fn new() -> Environment {
+impl<LINK: LinkWeightStrategy> Environment<LINK> {
+    pub fn new() -> Environment<LINK> {
         Environment {
             node_innovation_counter: Innovation::new(0),
             link_innovation_counter: Innovation::new(0),
             link_innovation_cache: BTreeMap::new(),
+            _marker_link: PhantomData,
         }
-    }
-
-    // XXX
-    fn random_link_weight<R: Rng>(&mut self, rng: &mut R) -> f64 {
-        // XXX Choose a weight between -1 and 1?
-        rng.gen()
     }
 
     fn add_link<R: Rng>(&mut self,
@@ -233,7 +238,7 @@ impl Environment {
         let link_gene = LinkGene {
             source_node_gene: source_node,
             target_node_gene: target_node,
-            weight: self.random_link_weight(rng),
+            weight: LINK::random_link_weight(rng),
             active: true,
         };
         self.add_link_gene(genome, link_gene);
