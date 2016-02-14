@@ -146,14 +146,14 @@ impl<T: Genotype + Debug> Population<T, Rated> {
               C: Distance<T>,
               M: Mate<T>
     {
-        println!("population size: {}", self.len());
+        debug!("population size: {}", self.len());
 
         assert!(elite_percentage.0 <= selection_percentage.0); // XXX
         assert!(self.len() > 0);
         let niches = self.partition(rng, compatibility_threshold, compatibility);
         let num_niches = niches.len();
 
-        println!("niches: {}", num_niches);
+        debug!("number of niches: {}", num_niches);
 
         assert!(num_niches > 0);
         let total_mean: Fitness = niches.iter().map(|ind| ind.mean_fitness()).sum();
@@ -180,18 +180,15 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             let elite_size =
                 cmp::max(1,
                          probabilistic_round(niche_size * elite_percentage.0, rng) as usize);
-            // println!("elite_size: {}", elite_size);
 
             // number of offspring to produce.
             let offspring_size = probabilistic_round(niche_size * (1.0 - elite_percentage.0),
                                                      rng) as usize;
-            // println!("offspring_size: {}", offspring_size);
 
             // number of the best individuals to use for mating.
             let select_size = probabilistic_round(niche_size *
                                                   selection_percentage.0,
                                                   rng) as usize;
-            // println!("select_size: {}", select_size);
 
             let sorted_niche = niche.sort();
 

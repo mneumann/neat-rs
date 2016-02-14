@@ -3,7 +3,8 @@
 extern crate rand;
 extern crate rayon;
 extern crate fixedbitset;
-
+#[macro_use]
+extern crate log;
 
 pub mod traits;
 pub mod innovation;
