@@ -7,6 +7,7 @@ use rand::Rng;
 use std::collections::BTreeMap;
 use super::adj_matrix::AdjMatrix;
 use std::marker::PhantomData;
+use super::mutate::MutateMethod;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NodeType {
@@ -265,6 +266,21 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
 
     fn new_node_innovation(&mut self) -> Innovation {
         self.node_innovation_counter.next().unwrap()
+    }
+
+    pub fn mutate<R: Rng>(&mut self,
+                          genome: &NetworkGenome,
+                          method: MutateMethod,
+                          rng: &mut R)
+                          -> Option<NetworkGenome> {
+        match method {
+            MutateMethod::ModifyWeight => {
+                // XXX
+                None
+            }
+            MutateMethod::AddConnection => self.mutate_add_connection(genome, rng),
+            MutateMethod::AddNode => self.mutate_add_node(genome, rng),
+        }
     }
 
     pub fn mutate_add_connection<R: Rng>(&mut self,

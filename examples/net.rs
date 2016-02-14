@@ -14,8 +14,8 @@ use neat::prob::is_probable;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
-use rand::distributions::{WeightedChoice, Weighted, IndependentSample};
 use std::marker::PhantomData;
+use neat::mutate::{MutateMethod, MutateMethodWeighting};
 
 fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
     use std::fs::File;
@@ -103,17 +103,9 @@ const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
-#[derive(Debug, Copy, Clone)]
-enum RecombinationMethod {
-    MutateWeight,
-    MutateStructure,
-    Crossover,
-}
-
 struct Mater<'a, T: LinkWeightStrategy + 'a> {
-    w_mutate_weight: u32,
-    w_mutate_structure: u32,
-    w_crossover: u32,
+    // probability for crossover. P_mutate = 1.0 - p_crossover
+    p_crossover: Closed01<f32>,
     env: &'a mut Environment<T>,
 }
 
@@ -125,58 +117,27 @@ impl<'a, T: LinkWeightStrategy> Mate<NetworkGenome> for Mater<'a, T> {
                     parent_right: &NetworkGenome,
                     rng: &mut R)
                     -> NetworkGenome {
-        assert!(self.w_mutate_weight + self.w_mutate_structure + self.w_crossover > 0);
-        let mut items = [Weighted {
-                             weight: self.w_mutate_weight,
-                             item: RecombinationMethod::MutateWeight,
-                         },
-                         Weighted {
-                             weight: self.w_mutate_structure,
-                             item: RecombinationMethod::MutateStructure,
-                         },
-                         Weighted {
-                             weight: self.w_crossover,
-                             item: RecombinationMethod::Crossover,
-                         }];
-        let wc = WeightedChoice::new(&mut items);
-
-        match wc.ind_sample(rng) {
-            RecombinationMethod::MutateWeight => {
-                // TODO
-                parent_left.clone()
-            }
-            RecombinationMethod::MutateStructure => {
-                if is_probable(&Closed01(0.5), rng) {
-                    // AddConnection
-                    let offspring = self.env
-                                        .mutate_add_connection(parent_left, rng)
-                                        .or_else(|| {
-                                            self.env.mutate_add_connection(parent_right, rng)
-                                        })
-                                        .unwrap_or_else(|| parent_left.clone());
-                    offspring
-                } else {
-                    // AddNode (split existing connection)
-                    let offspring = self.env
-                                        .mutate_add_node(parent_left, rng)
-                                        .or_else(|| self.env.mutate_add_node(parent_right, rng))
-                                        .unwrap_or_else(|| parent_left.clone());
-                    offspring
-                }
-            }
-            RecombinationMethod::Crossover => {
-                let x = ProbabilisticCrossover {
-                    prob_match_left: Closed01(0.5), /* NEAT always selects a random parent for matching genes */
-                    prob_disjoint_left: Closed01(0.9),
-                    prob_excess_left: Closed01(0.9),
-                    prob_disjoint_right: Closed01(0.15),
-                    prob_excess_right: Closed01(0.15),
-                };
-
-                NetworkGenome::crossover(parent_left, parent_right, &x, rng)
-            }
+        if is_probable(&self.p_crossover, rng) {
+            let x = ProbabilisticCrossover {
+                prob_match_left: Closed01(0.5), /* NEAT always selects a random parent for matching genes */
+                prob_disjoint_left: Closed01(0.9),
+                prob_excess_left: Closed01(0.9),
+                prob_disjoint_right: Closed01(0.15),
+                prob_excess_right: Closed01(0.15),
+            };
+            NetworkGenome::crossover(parent_left, parent_right, &x, rng)
+        } else {
+            // mutate
+            let p = MutateMethodWeighting {
+                w_modify_weight: 1,
+                w_add_node: 1,
+                w_add_connection: 1,
+            };
+            let mutate_method = MutateMethod::random_with(&p, rng); 
+            self.env.mutate(parent_left, mutate_method, rng).
+                or_else(|| self.env.mutate(parent_right, mutate_method, rng)).
+                unwrap_or_else(|| parent_left.clone())
         }
-
     }
 }
 
@@ -205,9 +166,7 @@ fn main() {
     assert!(initial_pop.len() == POP_SIZE);
 
     let mut mater = Mater {
-        w_mutate_weight: 0,
-        w_mutate_structure: 30,
-        w_crossover: 70,
+        p_crossover: Closed01(0.5),
         env: &mut env,
     };
 
