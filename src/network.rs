@@ -138,39 +138,41 @@ impl NetworkGenome {
     }
 
     /// Constructs the adjacency matrix from the genome.
-    fn adjacency_matrix(&self) -> (AdjMatrix, Vec<Option<Innovation>>) {
-        // maps the node innovation to the index in the adjacency matrix
+    fn adjacency_matrix(&self) -> (AdjMatrix, Vec<Innovation>) {
+        // map the node innovation to the index in the adjacency matrix
         let mut map_to_indices: BTreeMap<Innovation, usize> = BTreeMap::new();
+        // and the reverse map from index to Innovation
+        let mut rev_map: Vec<Innovation> = Vec::new();
 
         for &node_innov in self.node_genes.map.keys() {
-            let next_idx = map_to_indices.len();
-            let source_idx = *(map_to_indices.entry(node_innov).or_insert(next_idx));
+            let next_idx = rev_map.len();
+            rev_map.push(node_innov);
+            let prev = map_to_indices.insert(node_innov, next_idx);
+            assert!(prev.is_none());
         }
 
-        for link in self.link_genes.map.values() {
-            if link.active {
-                let next_idx = map_to_indices.len();
-                let source_idx = *(map_to_indices.entry(link.source_node_gene).or_insert(next_idx));
-                let next_idx = map_to_indices.len();
-                let target_idx = *(map_to_indices.entry(link.target_node_gene).or_insert(next_idx));
-            }
-        }
+        assert!(rev_map.len() == map_to_indices.len());
+
+        // //The code below is not neccessary, because our genomes contain all node innovation
+        // //that occur in the link genes.
+        //
+        // for link in self.link_genes.map.values() {
+        // if link.active {
+        // let next_idx = map_to_indices.len();
+        // let source_idx = *(map_to_indices.entry(link.source_node_gene).or_insert(next_idx));
+        // let next_idx = map_to_indices.len();
+        // let target_idx = *(map_to_indices.entry(link.target_node_gene).or_insert(next_idx));
+        // }
+        // }
+
         let n = map_to_indices.len();
-        // XXX: Use node_genes count to create the adj_matrix in one step.
         let mut adj_matrix = AdjMatrix::new(n);
         for link in self.link_genes.map.values() {
             if link.active {
-                let source_idx = *map_to_indices.get(&link.source_node_gene).unwrap();
-                let target_idx = *map_to_indices.get(&link.target_node_gene).unwrap();
-                adj_matrix.set(source_idx, target_idx);
+                adj_matrix.set(map_to_indices[&link.source_node_gene],
+                               map_to_indices[&link.target_node_gene]);
             }
         }
-        // construct a reverse map
-        let mut rev_map: Vec<Option<Innovation>> = (0..n).map(|_| None).collect();
-        for (&k, &v) in map_to_indices.iter() {
-            rev_map[v] = Some(k);
-        }
-        assert!(rev_map.iter().all(Option::is_some));
 
         (adj_matrix, rev_map)
     }
@@ -192,19 +194,13 @@ impl NetworkGenome {
         // Construct binary adjacency matrix
         let (adj_matrix, rev_map) = self.adjacency_matrix();
 
-        // generate the transitive closure.
-        let transitive_closure = adj_matrix.transitive_closure();
-
         // Construct an array of all currently unconnected nodes.
-        let unconnected = transitive_closure.unconnected_pairs_no_cycle();
+        let unconnected = adj_matrix.transitive_closure().unconnected_pairs_no_cycle();
 
         // Out of all unconnected pairs, choose a random one.
-        rng.choose(&unconnected).map(|&(src, target)| {
+        rng.choose(&unconnected).map(|&(source, target)| {
             // reverse map src and target to the node innovation
-            let src_innovation = rev_map[src].unwrap();
-            let target_innovation = rev_map[target].unwrap();
-
-            (src_innovation, target_innovation)
+            (rev_map[source], rev_map[target])
         })
     }
 }
