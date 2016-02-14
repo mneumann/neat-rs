@@ -73,6 +73,7 @@ impl AdjMatrix {
     }
 
     /// This is O(n**4) in worst case.
+    /// XXX: This needs a test for correctness
     fn transitive_closure(mut self) -> AdjMatrix {
         loop {
             let mut counts = 0;
@@ -152,18 +153,6 @@ impl NetworkGenome {
         }
 
         assert!(rev_map.len() == map_to_indices.len());
-
-        // //The code below is not neccessary, because our genomes contain all node innovation
-        // //that occur in the link genes.
-        //
-        // for link in self.link_genes.map.values() {
-        // if link.active {
-        // let next_idx = map_to_indices.len();
-        // let source_idx = *(map_to_indices.entry(link.source_node_gene).or_insert(next_idx));
-        // let next_idx = map_to_indices.len();
-        // let target_idx = *(map_to_indices.entry(link.target_node_gene).or_insert(next_idx));
-        // }
-        // }
 
         let n = map_to_indices.len();
         let mut adj_matrix = AdjMatrix::new(n);
