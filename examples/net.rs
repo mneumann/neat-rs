@@ -106,6 +106,8 @@ const OUTPUTS: usize = 3;
 struct Mater<'a, T: LinkWeightStrategy + 'a> {
     // probability for crossover. P_mutate = 1.0 - p_crossover
     p_crossover: Closed01<f32>,
+    p_crossover_detail: ProbabilisticCrossover,
+    mutate_weights: MutateMethodWeighting,
     env: &'a mut Environment<T>,
 }
 
@@ -118,22 +120,10 @@ impl<'a, T: LinkWeightStrategy> Mate<NetworkGenome> for Mater<'a, T> {
                     rng: &mut R)
                     -> NetworkGenome {
         if is_probable(&self.p_crossover, rng) {
-            let x = ProbabilisticCrossover {
-                prob_match_left: Closed01(0.5), /* NEAT always selects a random parent for matching genes */
-                prob_disjoint_left: Closed01(0.9),
-                prob_excess_left: Closed01(0.9),
-                prob_disjoint_right: Closed01(0.15),
-                prob_excess_right: Closed01(0.15),
-            };
-            NetworkGenome::crossover(parent_left, parent_right, &x, rng)
+            NetworkGenome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
         } else {
             // mutate
-            let p = MutateMethodWeighting {
-                w_modify_weight: 1,
-                w_add_node: 1,
-                w_add_connection: 1,
-            };
-            let mutate_method = MutateMethod::random_with(&p, rng); 
+            let mutate_method = MutateMethod::random_with(&self.mutate_weights, rng);
             self.env.mutate(parent_left, mutate_method, rng).
                 or_else(|| self.env.mutate(parent_right, mutate_method, rng)).
                 unwrap_or_else(|| parent_left.clone())
@@ -167,6 +157,19 @@ fn main() {
 
     let mut mater = Mater {
         p_crossover: Closed01(0.5),
+        p_crossover_detail: ProbabilisticCrossover {
+                prob_match_left: Closed01(0.5), /* NEAT always selects a random parent for matching genes */
+                prob_disjoint_left: Closed01(0.9),
+                prob_excess_left: Closed01(0.9),
+                prob_disjoint_right: Closed01(0.15),
+                prob_excess_right: Closed01(0.15),
+            },
+        mutate_weights: MutateMethodWeighting {
+            w_modify_weight: 1,
+            w_add_node: 1,
+            w_add_connection: 1,
+        },
+
         env: &mut env,
     };
 
