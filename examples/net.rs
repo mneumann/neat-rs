@@ -2,22 +2,23 @@ extern crate neat;
 extern crate rand;
 extern crate graph_neighbor_matching;
 extern crate graph_io_gml as gml;
+extern crate closed01;
 
-use neat::population::{Population, Rated, Unrated, Individual, Runner};
+use neat::population::{Population, Unrated, Runner};
 use neat::network::{NetworkGenome, NetworkGenomeDistance, LinkGeneListDistance, LinkGene, NodeGene, NodeType};
 use neat::innovation::{Innovation, InnovationContainer};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
 use neat::prob::is_probable;
-use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, IgnoreNodeColors};
+use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use std::collections::BTreeMap;
 use rand::{Rng, Closed01};
 use rand::distributions::{WeightedChoice, Weighted, IndependentSample};
 use std::marker::PhantomData;
 
-fn load_graph(graph_file: &str) -> OwnedGraph {
+fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
     use std::fs::File;
     use std::io::Read;
 
@@ -29,18 +30,27 @@ fn load_graph(graph_file: &str) -> OwnedGraph {
     };
 
     let graph = gml::parse_gml(&graph_s,
-                               &|_| -> Option<()> { Some(()) },
+                               &|sexp| -> Option<NodeType> {
+                                   sexp.and_then(|se| se.get_str().map(|s|
+                                        match s {
+                                            "input" => NodeType::Input,
+                                            "output" => NodeType::Output,
+                                            "hidden" => NodeType::Hidden,
+                                            _ => panic!("Invalid node type/weight"),
+                                        }
+                                   ))
+                               },
                                &|_| -> Option<()> { Some(()) })
                     .unwrap();
     OwnedGraph::from_petgraph(&graph)
 }
 
-fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph {
+fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
     let mut builder = GraphBuilder::new();
 
     for (&innov, node) in genome.node_genes.map.iter() {
         // make sure the node exists, even if there are no connection to it.
-        let _ = builder.add_or_replace_node(innov.get());
+        let _ = builder.add_node(innov.get(), node.node_type);
     }
 
     for link in genome.link_genes.map.values() {
@@ -54,14 +64,27 @@ fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph {
 
 #[derive(Debug)]
 struct FitnessEvaluator {
-    target_graph: OwnedGraph,
+    target_graph: OwnedGraph<NodeType>,
+}
+
+#[derive(Debug)]
+struct NodeColors;
+
+impl NodeColorMatching<NodeType> for NodeColors {
+    fn node_color_matching(&self, node_i_value: &NodeType, node_j_value: &NodeType) -> closed01::Closed01<f32> {
+        if node_i_value == node_j_value {
+            closed01::Closed01::one()
+        } else {
+            closed01::Closed01::zero()
+        }
+    }
 }
 
 impl FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &NetworkGenome) -> f32 {
         let graph = genome_to_graph(genome);
-        let mut s = SimilarityMatrix::new(&graph, &self.target_graph, IgnoreNodeColors);
+        let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
         s.score_optimal_sum_norm(None, ScoreNorm::MaxDegree).get()
     }

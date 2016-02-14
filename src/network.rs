@@ -7,11 +7,17 @@ use rand::Rng;
 use fixedbitset::FixedBitSet;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NodeType {
     Input,
     Output,
     Hidden,
+}
+
+impl Default for NodeType {
+    fn default() -> Self {
+        NodeType::Hidden
+    }
 }
 
 #[derive(Debug, Clone)]
