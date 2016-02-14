@@ -5,15 +5,13 @@ extern crate graph_io_gml as gml;
 extern crate closed01;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::network::{NetworkGenome, NetworkGenomeDistance, LinkGeneListDistance, LinkGene, NodeGene, NodeType};
-use neat::innovation::{Innovation, InnovationContainer};
+use neat::network::{NetworkGenome, NetworkGenomeDistance, LinkGeneListDistance, NodeType, Environment};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
 use neat::prob::is_probable;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
-use std::collections::BTreeMap;
 use rand::{Rng, Closed01};
 use rand::distributions::{WeightedChoice, Weighted, IndependentSample};
 use std::marker::PhantomData;
@@ -87,114 +85,6 @@ impl FitnessEvaluator {
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
         s.score_optimal_sum_norm(None, ScoreNorm::MaxDegree).get()
-    }
-}
-
-struct Environment {
-    node_innovation_counter: Innovation,
-    link_innovation_counter: Innovation,
-    // (src_node, target_node) -> link_innovation
-    link_innovation_cache: BTreeMap<(Innovation, Innovation), Innovation>,
-}
-
-impl Environment {
-    fn new() -> Environment {
-        Environment {
-            node_innovation_counter: Innovation::new(0),
-            link_innovation_counter: Innovation::new(0),
-            link_innovation_cache: BTreeMap::new(),
-        }
-    }
-
-    fn random_link_weight<R: Rng>(&mut self, rng: &mut R) -> f64 {
-        // XXX Choose a weight between -1 and 1?
-        rng.gen()
-    }
-
-    fn add_link<R: Rng>(&mut self, genome: &mut NetworkGenome, source_node: Innovation, target_node: Innovation, rng: &mut R) {
-        let link_gene = LinkGene {
-            source_node_gene: source_node,
-            target_node_gene: target_node,
-            weight: self.random_link_weight(rng),
-            active: true,
-        };
-        self.add_link_gene(genome, link_gene);
-    }
-
-    fn add_link_gene(&mut self, genome: &mut NetworkGenome, link_gene: LinkGene) {
-        let link_innovation = self.get_link_innovation(link_gene.source_node_gene, link_gene.target_node_gene);
-        genome.link_genes.insert_or_replace(link_innovation, link_gene);
-    }
-
-    fn mutate_add_connection<R: Rng>(&mut self, genome: &NetworkGenome, rng: &mut R) -> Option<NetworkGenome> { 
-        genome.find_unconnected_pair(rng).map(|(src, target)| {
-            let mut offspring = genome.clone();
-            // Add new link to the offspring genome
-            self.add_link(&mut offspring, src, target, rng);
-            offspring
-        })
-    }
-
-    /// choose a random link. split it in half.
-    fn mutate_add_node<R: Rng>(&mut self, genome: &NetworkGenome, rng: &mut R) -> Option<NetworkGenome> {
-        if let Some(link_innov) = genome.find_random_active_link_gene(rng) {
-            // split link in half.
-            let mut offspring = genome.clone();
-            let new_node_innovation = self.new_node_innovation();
-            // add new node
-            offspring.node_genes.insert(new_node_innovation, NodeGene{node_type: NodeType::Hidden});
-            // disable `link_innov` in offspring
-            // we keep this gene (but disable it), because this allows us to have a structurally
-            // compatible genome to the old one, as disabled genes are taken into account for
-            // the genomic distance measure.
-            offspring.link_genes.get_mut(&link_innov).unwrap().disable();
-            // add two new link innovations with the new node in the middle.
-            // XXX: Choose random weights? Or split weight? We use random weights for now.
-            let (orig_src_node, orig_target_node) = {
-                let orig_link = offspring.link_genes.get(&link_innov).unwrap();
-                (orig_link.source_node_gene, orig_link.target_node_gene)
-            };
-            self.add_link(&mut offspring, orig_src_node, new_node_innovation, rng);
-            self.add_link(&mut offspring, new_node_innovation, orig_target_node, rng);
-            Some(offspring)
-        } else {
-            None
-        }
-    }
-
-    fn new_node_innovation(&mut self) -> Innovation {
-        self.node_innovation_counter.next().unwrap()
-    }
-
-    fn get_link_innovation(&mut self, source_node_gene: Innovation, target_node_gene: Innovation) -> Innovation {
-        let key = (source_node_gene, target_node_gene);
-        if let Some(&cached_innovation) = self.link_innovation_cache.get(&key) {
-            return cached_innovation;
-        }
-        let new_innovation = self.link_innovation_counter.next().unwrap();
-        self.link_innovation_cache.insert(key, new_innovation);
-        new_innovation
-    }
-
-    // Generates a NetworkGenome with `n_inputs` input nodes and `n_outputs` output nodes.
-    // The genome will not have any link nodes.
-    fn generate_genome(&mut self, n_inputs: usize, n_outputs: usize) -> NetworkGenome {
-        assert!(n_inputs > 0 && n_outputs > 0);
-        let mut nodes = InnovationContainer::new();
-        for _ in 0..n_inputs {
-            nodes.insert(self.node_innovation_counter.next().unwrap(),
-                         NodeGene { node_type: NodeType::Input });
-        }
-        assert!(nodes.len() == n_inputs);
-        for _ in 0..n_outputs {
-            nodes.insert(self.node_innovation_counter.next().unwrap(),
-                         NodeGene { node_type: NodeType::Output });
-        }
-        assert!(nodes.len() == n_inputs + n_outputs);
-        NetworkGenome {
-            link_genes: InnovationContainer::new(),
-            node_genes: nodes,
-        }
     }
 }
 
