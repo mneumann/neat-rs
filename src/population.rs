@@ -194,7 +194,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
 
             let select_size = cmp::min(select_size, sorted_niche.len());
 
-            // at first produce ```offspring_size``` individuals from the top ```select_size```
+            // at first produce `offspring_size` individuals from the top `select_size`
             // individuals.
             if select_size > 0 {
                 let mut n = offspring_size;
