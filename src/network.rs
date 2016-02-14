@@ -340,7 +340,7 @@ impl Environment {
                                    genome: &NetworkGenome,
                                    rng: &mut R)
                                    -> Option<NetworkGenome> {
-        if let Some(link_innov) = genome.find_random_active_link_gene(rng) {
+        genome.find_random_active_link_gene(rng).map(|link_innov| {
             // split link in half.
             let mut offspring = genome.clone();
             let new_node_innovation = self.new_node_innovation();
@@ -360,10 +360,8 @@ impl Environment {
             };
             self.add_link(&mut offspring, orig_src_node, new_node_innovation, rng);
             self.add_link(&mut offspring, new_node_innovation, orig_target_node, rng);
-            Some(offspring)
-        } else {
-            None
-        }
+            offspring
+        })
     }
 
     fn new_node_innovation(&mut self) -> Innovation {
