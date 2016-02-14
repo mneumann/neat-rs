@@ -116,11 +116,22 @@ impl NetworkGenome {
     // Uses the crossover method C to recombine left and right.
     pub fn crossover<R: Rng, C: Crossover>(left: &Self, right: &Self, c: &C, rng: &mut R) -> Self {
         let new_link_genes = c.crossover(&left.link_genes, &right.link_genes, rng);
-        // XXX: also crossover the node genes and include node genes if there is a link gene
-        // refering it.
+        let mut new_node_genes = c.crossover(&left.node_genes, &right.node_genes, rng);
+
+        // Additionally make sure that all link genes have a correspondant node gene.
+        // We do this also for disabled links!
+        for link in new_link_genes.map.values() {
+            new_node_genes.insert_from_either_or(link.source_node_gene,
+                                                 &left.node_genes,
+                                                 &right.node_genes);
+            new_node_genes.insert_from_either_or(link.target_node_gene,
+                                                 &left.node_genes,
+                                                 &right.node_genes);
+        }
+
         NetworkGenome {
             link_genes: new_link_genes,
-            node_genes: left.node_genes.clone(), // XXX
+            node_genes: new_node_genes,
         }
     }
 

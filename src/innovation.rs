@@ -11,7 +11,7 @@ pub enum InnovationRange {
 }
 
 #[derive(Debug, Clone)]
-pub struct InnovationContainer<T> {
+pub struct InnovationContainer<T: Clone> {
     pub map: BTreeMap<Innovation, T>,
 }
 
@@ -61,7 +61,7 @@ impl InnovationRange {
     }
 }
 
-impl<T> InnovationContainer<T> {
+impl<T: Clone> InnovationContainer<T> {
     pub fn new() -> InnovationContainer<T> {
         InnovationContainer { map: BTreeMap::new() }
     }
@@ -70,6 +70,20 @@ impl<T> InnovationContainer<T> {
         // XXX
         // assert!(!self.map.contains_key(&innov));
         self.map.insert(innov, data);
+    }
+
+    pub fn contains_key(&self, innov: &Innovation) -> bool {
+        self.map.contains_key(innov)
+    }
+
+    // Insert `innov` from either `left` or from `right`, unless it already exists in `self`.
+    // Panics if both `left` and `right` do not include `innov`.
+    pub fn insert_from_either_or(&mut self, innov: Innovation, left: &Self, right: &Self) {
+        // XXX: Use entry()
+        if !self.contains_key(&innov) {
+            let gene = left.get(&innov).or_else(|| right.get(&innov)).unwrap();
+            self.insert(innov, gene.clone());
+        }
     }
 
     pub fn get(&self, innov: &Innovation) -> Option<&T> {

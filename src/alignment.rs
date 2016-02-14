@@ -1,5 +1,6 @@
 /// Align the innovations of two InnovationContainers.
-pub enum Alignment<'a, T: 'a> {
+#[derive(Debug, Clone)]
+pub enum Alignment<'a, T: Clone + 'a> {
     Match(&'a T, &'a T),
     DisjointLeft(&'a T),
     DisjointRight(&'a T),
@@ -7,7 +8,7 @@ pub enum Alignment<'a, T: 'a> {
     ExcessRight(&'a T),
 }
 
-impl<'a, T: 'a> Alignment<'a, T> {
+impl<'a, T: Clone + 'a> Alignment<'a, T> {
     pub fn is_match(&self) -> bool {
         match self {
             &Alignment::Match(..) => true,
