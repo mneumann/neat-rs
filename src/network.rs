@@ -72,7 +72,8 @@ impl AdjMatrix {
         self.m.contains(i * self.n + j)
     }
 
-    fn transitive_closure(&mut self) {
+    /// This is O(n**4) in worst case.
+    fn transitive_closure(mut self) -> AdjMatrix {
         loop {
             let mut counts = 0;
             for i in 0..self.n {
@@ -94,6 +95,7 @@ impl AdjMatrix {
                 break;
             }
         }
+        self
     }
 
     fn unconnected_pairs_no_cycle(&self) -> Vec<(usize, usize)> {
@@ -185,16 +187,16 @@ impl NetworkGenome {
     }
 
     /// Returns two node innvovations which are not yet connected and which does not
-    /// create a cycle, or None if no such exists.
+    /// create a cycle. Return `None` if no such connection exists.
     pub fn find_unconnected_pair<R: Rng>(&self, rng: &mut R) -> Option<(Innovation, Innovation)> {
         // Construct binary adjacency matrix
         let (adj_matrix, rev_map) = self.adjacency_matrix();
 
         // generate the transitive closure.
-        let transitive_closure = adj_matrix.clone().transitive_closure();
+        let transitive_closure = adj_matrix.transitive_closure();
 
         // Construct an array of all currently unconnected nodes.
-        let unconnected = adj_matrix.unconnected_pairs_no_cycle();
+        let unconnected = transitive_closure.unconnected_pairs_no_cycle();
 
         // Out of all unconnected pairs, choose a random one.
         rng.choose(&unconnected).map(|&(src, target)| {
