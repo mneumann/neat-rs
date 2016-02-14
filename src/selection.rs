@@ -9,7 +9,7 @@ use rand::Rng;
 /// but the probability is very low if `n` is high compared to `k`.
 #[inline]
 pub fn tournament_selection_fast<R: Rng, F>(rng: &mut R,
-                                            better_than: F,
+                                            better_than: &F,
                                             n: usize,
                                             k: usize)
                                             -> usize
@@ -29,4 +29,30 @@ pub fn tournament_selection_fast<R: Rng, F>(rng: &mut R,
     }
 
     return best;
+}
+
+
+#[inline]
+/// Same as `tournament_selection_fast`, but return two individuls.
+/// Retry `n_retries` times if they point to the same individual.
+pub fn tournament_selection_fast2<R: Rng, F>(rng: &mut R,
+                                             better_than: &F,
+                                             n: usize,
+                                             k: usize,
+                                             n_retries: usize)
+                                             -> (usize, usize)
+    where F: Fn(usize, usize) -> bool
+{
+    let first = tournament_selection_fast(rng, better_than, n, k);
+
+    let mut retries = 0;
+    loop {
+        let second = tournament_selection_fast(rng, better_than, n, k);
+
+        if first != second || retries >= n_retries {
+            return (first, second);
+        }
+
+        retries += 1;
+    }
 }
