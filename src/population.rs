@@ -92,8 +92,8 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         self.individuals.push(ind);
     }
 
-    // Return true if genome at position `i` is better that `j`
-    fn compare_ij(&self, i: usize, j: usize) -> bool {
+    // Return true if genome at position `i` is fitter that `j`
+    fn is_fitter(&self, i: usize, j: usize) -> bool {
         self.individuals[i].fitness > self.individuals[j].fitness
     }
 
@@ -201,15 +201,20 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                 while n > 0 {
                     let (parent1, parent2) =
                         selection::tournament_selection_fast2(rng,
-                                                              &|i, j| {
-                                                                  sorted_niche.compare_ij(i, j)
-                                                              },
+                                                              &|i, j| sorted_niche.is_fitter(i, j),
                                                               select_size,
                                                               cmp::min(select_size, tournament_k),
                                                               3);
 
-                    let offspring = mate.mate(&sorted_niche.individuals[parent1].genome,
-                                              &sorted_niche.individuals[parent2].genome,
+                    // `mate` assumes that the left parent performs better.
+                    let (left, right) = if sorted_niche.is_fitter(parent1, parent2) {
+                        (parent1, parent2)
+                    } else {
+                        (parent2, parent1)
+                    };
+                    let offspring = mate.mate(&sorted_niche.individuals[left].genome,
+                                              &sorted_niche.individuals[right].genome,
+                                              left == right,
                                               rng);
                     new_unrated_population.add_genome(Box::new(offspring));
                     n -= 1;

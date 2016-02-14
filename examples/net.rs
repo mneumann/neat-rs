@@ -117,9 +117,10 @@ impl<'a, T: LinkWeightStrategy> Mate<NetworkGenome> for Mater<'a, T> {
     fn mate<R: Rng>(&mut self,
                     parent_left: &NetworkGenome,
                     parent_right: &NetworkGenome,
+                    prefer_mutate: bool,
                     rng: &mut R)
                     -> NetworkGenome {
-        if is_probable(&self.p_crossover, rng) {
+        if prefer_mutate == false && is_probable(&self.p_crossover, rng) {
             NetworkGenome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
         } else {
             // mutate

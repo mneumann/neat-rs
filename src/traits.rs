@@ -23,5 +23,10 @@ pub trait Gene: Clone + Debug {
 /// be used mutation only. Usually this is either crossover or mutation,
 /// or both.
 pub trait Mate<T: Genotype> {
-    fn mate<R: Rng>(&mut self, parent_left: &T, parent_right: &T, rng: &mut R) -> T;
+    fn mate<R: Rng>(&mut self,
+                    parent_left: &T,
+                    parent_right: &T,
+                    prefer_mutate: bool,
+                    rng: &mut R)
+                    -> T;
 }
