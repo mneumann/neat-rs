@@ -323,6 +323,10 @@ impl Environment {
         new_innovation
     }
 
+    fn new_node_innovation(&mut self) -> Innovation {
+        self.node_innovation_counter.next().unwrap()
+    }
+
     pub fn mutate_add_connection<R: Rng>(&mut self,
                                          genome: &NetworkGenome,
                                          rng: &mut R)
@@ -362,10 +366,6 @@ impl Environment {
             self.add_link(&mut offspring, new_node_innovation, orig_target_node, rng);
             offspring
         })
-    }
-
-    fn new_node_innovation(&mut self) -> Innovation {
-        self.node_innovation_counter.next().unwrap()
     }
 
     // Generates a NetworkGenome with `n_inputs` input nodes and `n_outputs` output nodes.
