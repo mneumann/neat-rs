@@ -68,7 +68,11 @@ impl<T: Clone> InnovationContainer<T> {
 
     pub fn insert(&mut self, innov: Innovation, data: T) {
         // XXX
-        // assert!(!self.map.contains_key(&innov));
+        assert!(!self.map.contains_key(&innov));
+        self.map.insert(innov, data);
+    }
+
+    pub fn insert_or_replace(&mut self, innov: Innovation, data: T) {
         self.map.insert(innov, data);
     }
 

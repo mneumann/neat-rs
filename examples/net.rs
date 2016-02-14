@@ -111,26 +111,26 @@ impl Environment {
         rng.gen()
     }
 
-    fn insert_new_link<R: Rng>(&mut self, genome: &mut NetworkGenome, source_node: Innovation, target_node: Innovation, rng: &mut R) {
+    fn add_link<R: Rng>(&mut self, genome: &mut NetworkGenome, source_node: Innovation, target_node: Innovation, rng: &mut R) {
         let link_gene = LinkGene {
             source_node_gene: source_node,
             target_node_gene: target_node,
             weight: self.random_link_weight(rng),
             active: true,
         };
-        self.insert_new_link_gene(genome, link_gene);
+        self.add_link_gene(genome, link_gene);
     }
 
-    fn insert_new_link_gene(&mut self, genome: &mut NetworkGenome, link_gene: LinkGene) {
-        let new_link_innovation = self.new_link_innovation(link_gene.source_node_gene, link_gene.target_node_gene);
-        genome.link_genes.insert(new_link_innovation, link_gene);
+    fn add_link_gene(&mut self, genome: &mut NetworkGenome, link_gene: LinkGene) {
+        let link_innovation = self.get_link_innovation(link_gene.source_node_gene, link_gene.target_node_gene);
+        genome.link_genes.insert_or_replace(link_innovation, link_gene);
     }
 
     fn mutate_add_connection<R: Rng>(&mut self, genome: &NetworkGenome, rng: &mut R) -> Option<NetworkGenome> { 
         genome.find_unconnected_pair(rng).map(|(src, target)| {
             let mut offspring = genome.clone();
             // Add new link to the offspring genome
-            self.insert_new_link(&mut offspring, src, target, rng);
+            self.add_link(&mut offspring, src, target, rng);
             offspring
         })
     }
@@ -154,8 +154,8 @@ impl Environment {
                 let orig_link = offspring.link_genes.get(&link_innov).unwrap();
                 (orig_link.source_node_gene, orig_link.target_node_gene)
             };
-            self.insert_new_link(&mut offspring, orig_src_node, new_node_innovation, rng);
-            self.insert_new_link(&mut offspring, new_node_innovation, orig_target_node, rng);
+            self.add_link(&mut offspring, orig_src_node, new_node_innovation, rng);
+            self.add_link(&mut offspring, new_node_innovation, orig_target_node, rng);
             Some(offspring)
         } else {
             None
@@ -166,7 +166,7 @@ impl Environment {
         self.node_innovation_counter.next().unwrap()
     }
 
-    fn new_link_innovation(&mut self, source_node_gene: Innovation, target_node_gene: Innovation) -> Innovation {
+    fn get_link_innovation(&mut self, source_node_gene: Innovation, target_node_gene: Innovation) -> Innovation {
         let key = (source_node_gene, target_node_gene);
         if let Some(&cached_innovation) = self.link_innovation_cache.get(&key) {
             return cached_innovation;
