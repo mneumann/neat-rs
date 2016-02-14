@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use super::alignment::Alignment;
+use super::alignment::{Alignment, AlignmentMetric};
+use super::traits::Gene;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct Innovation(usize);
@@ -11,7 +12,7 @@ pub enum InnovationRange {
 }
 
 #[derive(Debug, Clone)]
-pub struct InnovationContainer<T: Clone> {
+pub struct InnovationContainer<T: Gene> {
     pub map: BTreeMap<Innovation, T>,
 }
 
@@ -61,7 +62,7 @@ impl InnovationRange {
     }
 }
 
-impl<T: Clone> InnovationContainer<T> {
+impl<T: Gene> InnovationContainer<T> {
     pub fn new() -> InnovationContainer<T> {
         InnovationContainer { map: BTreeMap::new() }
     }
@@ -106,11 +107,15 @@ impl<T: Clone> InnovationContainer<T> {
         InnovationRange::from_sorted_iter(self.map.keys().cloned())
     }
 
+    #[cfg(test)]
     fn align_as_container<'a>(&'a self,
                               right: &'a InnovationContainer<T>)
-                              -> InnovationContainer<Alignment<'a, T>> {
-        let mut c = InnovationContainer::new();
-        self.align(right, &mut |innov, alignment| c.insert(innov, alignment));
+                              -> BTreeMap<Innovation, Alignment<'a, T>> {
+        let mut c = BTreeMap::new();
+        self.align(right,
+                   &mut |innov, alignment| {
+                       c.insert(innov, alignment);
+                   });
         c
     }
 
@@ -141,7 +146,32 @@ impl<T: Clone> InnovationContainer<T> {
             }
         }
     }
+
+    pub fn alignment_metric(&self, right: &InnovationContainer<T>) -> AlignmentMetric {
+        let mut m = AlignmentMetric::new();
+        self.align(right,
+                   &mut |_, alignment| {
+                       match alignment {
+                           Alignment::Match(gene_left, gene_right) => {
+                               m.matching += 1;
+                               m.weight_distance += gene_left.weight_distance(gene_right).abs();
+                           }
+                           Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
+                               m.disjoint += 1;
+                           }
+                           Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
+                               m.excess += 1;
+                           }
+                       }
+                   });
+
+        assert!(2 * m.matching + m.disjoint + m.excess == self.len() + right.len());
+        return m;
+    }
 }
+
+#[cfg(test)]
+impl Gene for () {}
 
 #[test]
 fn test_innovation() {
@@ -191,10 +221,15 @@ fn test_innovation_alignment() {
     assert_eq!(6, c.len());
     assert_eq!(true, c.get(&Innovation(50)).unwrap().is_match());
     assert_eq!(true, c.get(&Innovation(40)).unwrap().is_excess_left());
+    assert_eq!(true, c.get(&Innovation(40)).unwrap().is_excess());
     assert_eq!(true, c.get(&Innovation(45)).unwrap().is_disjoint_right());
+    assert_eq!(true, c.get(&Innovation(45)).unwrap().is_disjoint());
     assert_eq!(true, c.get(&Innovation(46)).unwrap().is_disjoint_left());
+    assert_eq!(true, c.get(&Innovation(46)).unwrap().is_disjoint());
     assert_eq!(true, c.get(&Innovation(51)).unwrap().is_excess_right());
+    assert_eq!(true, c.get(&Innovation(51)).unwrap().is_excess());
     assert_eq!(true, c.get(&Innovation(52)).unwrap().is_excess_right());
+    assert_eq!(true, c.get(&Innovation(52)).unwrap().is_excess());
 }
 
 #[test]

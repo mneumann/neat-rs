@@ -1,6 +1,5 @@
 use super::innovation::{Innovation, InnovationContainer};
-use super::traits::{Distance, Genotype};
-use super::alignment::Alignment;
+use super::traits::{Distance, Genotype, Gene};
 use std::cmp;
 use super::crossover::Crossover;
 use rand::Rng;
@@ -27,6 +26,9 @@ pub struct NodeGene {
     pub node_type: NodeType,
 }
 
+impl Gene for NodeGene {}
+
+
 // To avoid node collisions we use Innovation numbers instead of node
 // ids.
 #[derive(Debug, Clone)]
@@ -39,50 +41,16 @@ pub struct LinkGene {
     pub active: bool,
 }
 
-struct LinkGeneAlignmentMeasure {
-    matching: usize,
-    disjoint: usize,
-    excess: usize,
-    weight_distance: f64,
+impl Gene for LinkGene {
+    fn weight_distance(&self, other: &Self) -> f64 {
+        self.weight - other.weight
+    }
 }
 
 impl LinkGene {
     pub fn disable(&mut self) {
         assert!(self.active);
         self.active = false;
-    }
-
-    fn count_alignment_and_weight_distance(genes_left: &InnovationContainer<Self>,
-                                           genes_right: &InnovationContainer<Self>)
-                                           -> LinkGeneAlignmentMeasure {
-
-        let mut m = LinkGeneAlignmentMeasure {
-            matching: 0,
-            disjoint: 0,
-            excess: 0,
-            weight_distance: 0.0,
-        };
-
-        genes_left.align(genes_right,
-                         &mut |_, alignment| {
-                             match alignment {
-                                 Alignment::Match(gene_left, gene_right) => {
-                                     m.matching += 1;
-                                     m.weight_distance += (gene_left.weight - gene_right.weight)
-                                                              .abs();
-                                 }
-                                 Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
-                                     m.disjoint += 1;
-                                 }
-                                 Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
-                                     m.excess += 1;
-                                 }
-                             }
-                         });
-
-        assert!(2 * m.matching + m.disjoint + m.excess == genes_left.len() + genes_right.len());
-
-        return m;
     }
 }
 
@@ -192,7 +160,7 @@ impl Distance<NetworkGenome> for NetworkGenomeDistance {
             return 0.0;
         }
 
-        let m = LinkGene::count_alignment_and_weight_distance(genes_left, genes_right);
+        let m = genes_left.alignment_metric(&genes_right);
 
         self.excess * (m.excess as f64) / (max_len as f64) +
         self.disjoint * (m.disjoint as f64) / (max_len as f64) +

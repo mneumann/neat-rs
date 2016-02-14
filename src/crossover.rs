@@ -2,17 +2,18 @@ use rand::{Rng, Closed01};
 use super::alignment::Alignment;
 use super::innovation::InnovationContainer;
 use super::prob::is_probable;
+use super::traits::Gene;
 
 // XXX: Move to traits. Abstract InnovationContainer away.
 pub trait Crossover {
     /// Performs a crossover between `parent_left` and `parent_right`
     /// resulting in a single offspring. It can be assumed that
     /// `parent_left` is the fitter parent.
-    fn crossover<T: Clone, R: Rng>(&self,
-                                   parent_left: &InnovationContainer<T>,
-                                   parent_right: &InnovationContainer<T>,
-                                   rng: &mut R)
-                                   -> InnovationContainer<T>;
+    fn crossover<T: Gene, R: Rng>(&self,
+                                  parent_left: &InnovationContainer<T>,
+                                  parent_right: &InnovationContainer<T>,
+                                  rng: &mut R)
+                                  -> InnovationContainer<T>;
 }
 
 /// A specific form of crossover where the probabilities below determine from
@@ -40,11 +41,11 @@ impl Crossover for ProbabilisticCrossover {
     /// `parent_left` is the fitter parent. Take gene
     /// either from `parent_left` or `parent_right` according to
     /// the specified probabilities and the relative fitness of the parents.
-    fn crossover<T: Clone, R: Rng>(&self,
-                                   parent_left: &InnovationContainer<T>,
-                                   parent_right: &InnovationContainer<T>,
-                                   rng: &mut R)
-                                   -> InnovationContainer<T> {
+    fn crossover<T: Gene, R: Rng>(&self,
+                                  parent_left: &InnovationContainer<T>,
+                                  parent_right: &InnovationContainer<T>,
+                                  rng: &mut R)
+                                  -> InnovationContainer<T> {
 
         let mut offspring = InnovationContainer::new();
 

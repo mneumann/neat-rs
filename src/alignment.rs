@@ -1,6 +1,8 @@
+use super::traits::Gene;
+
 /// Align the innovations of two InnovationContainers.
 #[derive(Debug, Clone)]
-pub enum Alignment<'a, T: Clone + 'a> {
+pub enum Alignment<'a, T: Gene + 'a> {
     Match(&'a T, &'a T),
     DisjointLeft(&'a T),
     DisjointRight(&'a T),
@@ -8,7 +10,8 @@ pub enum Alignment<'a, T: Clone + 'a> {
     ExcessRight(&'a T),
 }
 
-impl<'a, T: Clone + 'a> Alignment<'a, T> {
+#[cfg(test)]
+impl<'a, T: Gene + 'a> Alignment<'a, T> {
     pub fn is_match(&self) -> bool {
         match self {
             &Alignment::Match(..) => true,
@@ -57,6 +60,24 @@ impl<'a, T: Clone + 'a> Alignment<'a, T> {
             &Alignment::ExcessLeft(..) |
             &Alignment::ExcessRight(..) => true,
             _ => false,
+        }
+    }
+}
+
+pub struct AlignmentMetric {
+    pub matching: usize,
+    pub disjoint: usize,
+    pub excess: usize,
+    pub weight_distance: f64,
+}
+
+impl AlignmentMetric {
+    pub fn new() -> AlignmentMetric {
+        AlignmentMetric {
+            matching: 0,
+            disjoint: 0,
+            excess: 0,
+            weight_distance: 0.0,
         }
     }
 }
