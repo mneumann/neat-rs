@@ -24,10 +24,11 @@ impl Default for NodeType {
 #[derive(Debug, Clone)]
 pub struct NodeGene {
     pub node_type: NodeType,
+    /// an activation function is only useful for hidden nodes
+    pub activation_function: Option<u32>,
 }
 
 impl Gene for NodeGene {}
-
 
 // To avoid node collisions we use Innovation numbers instead of node
 // ids.
@@ -178,6 +179,9 @@ pub trait LinkWeightStrategy {
         // XXX Choose a weight between -1 and 1?
         rng.gen()
     }
+    fn random_activation_function<R: Rng>(rng: &mut R) -> u32 {
+        rng.gen_range(0, 5)
+    }
 }
 
 #[derive(Debug)]
@@ -273,8 +277,12 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
             let mut offspring = genome.clone();
             let new_node_innovation = self.new_node_innovation();
             // add new node
-            offspring.node_genes.insert(new_node_innovation,
-                                        NodeGene { node_type: NodeType::Hidden });
+            offspring.node_genes
+                     .insert(new_node_innovation,
+                             NodeGene {
+                                 node_type: NodeType::Hidden,
+                                 activation_function: Some(LINK::random_activation_function(rng)),
+                             });
             // disable `link_innov` in offspring
             // we keep this gene (but disable it), because this allows us to have a structurally
             // compatible genome to the old one, as disabled genes are taken into account for
@@ -305,12 +313,18 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
         let mut nodes = InnovationContainer::new();
         for _ in 0..n_inputs {
             nodes.insert(self.node_innovation_counter.next().unwrap(),
-                         NodeGene { node_type: NodeType::Input });
+                         NodeGene {
+                             node_type: NodeType::Input,
+                             activation_function: None,
+                         });
         }
         assert!(nodes.len() == n_inputs);
         for _ in 0..n_outputs {
             nodes.insert(self.node_innovation_counter.next().unwrap(),
-                         NodeGene { node_type: NodeType::Output });
+                         NodeGene {
+                             node_type: NodeType::Output,
+                             activation_function: None,
+                         });
         }
         assert!(nodes.len() == n_inputs + n_outputs);
         NetworkGenome {
