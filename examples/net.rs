@@ -36,8 +36,8 @@ fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
                                    sexp.and_then(|se| {
                                        se.get_str().map(|s| {
                                            match s {
-                                               "input" => NodeType::Input,
-                                               "output" => NodeType::Output,
+                                               "input" => NodeType::Input(0), // XXX
+                                               "output" => NodeType::Output(0), // XXX
                                                "hidden" => NodeType::Hidden{activation_function: 0}, // XXX
                                                _ => panic!("Invalid node type/weight"),
                                            }
@@ -68,11 +68,11 @@ fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
 
 // Treats the graph as CPPN and constructs a graph.
 // For the output node (there should be only one!), recursively build up a function
-/* fn genome_to_graph_hyperneat(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
+fn genome_to_graph_hyperneat(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
     let graph = genome_to_graph(genome);
     let petgraph = graph.to_petgraph();
     graph
-}*/
+}
 
 #[derive(Debug)]
 struct FitnessEvaluator {
@@ -90,8 +90,10 @@ impl NodeColorMatching<NodeType> for NodeColors {
 
         // Treat Hidden nodes as equal regardless of their activation function.
         let eq = match (node_i_value, node_j_value) {
+            (&NodeType::Input(..), &NodeType::Input(..)) => true,
+            (&NodeType::Output(..), &NodeType::Output(..)) => true,
             (&NodeType::Hidden{..}, &NodeType::Hidden{..}) => true,
-            (a, b) => a == b,
+            _ => false,
         };
 
         if eq {

@@ -10,8 +10,8 @@ use super::mutate::MutateMethod;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NodeType {
-    Input,
-    Output,
+    Input(u32),
+    Output(u32),
     Hidden {
         activation_function: u32,
     },
@@ -133,12 +133,14 @@ impl NetworkGenome {
         // additionally, we want to make sure, that there are only outgoing links from input nodes
         // (no incoming links), and only incoming links to output nodes.
         unconnected.retain(|&(source, target)| {
-            if let Some(&NodeGene{node_type: NodeType::Output, ..}) = self.node_genes
-                                                                          .get(&rev_map[source]) {
+            if let Some(&NodeGene{node_type: NodeType::Output(..), ..}) =
+                   self.node_genes
+                       .get(&rev_map[source]) {
                 // reject if source is an output node
                 false
-            } else if let Some(&NodeGene{node_type: NodeType::Input, ..}) = self.node_genes
-                                                                         .get(&rev_map[target]) {
+            } else if let Some(&NodeGene{node_type: NodeType::Input(..), ..}) =
+                   self.node_genes
+                       .get(&rev_map[target]) {
                 // reject if target is an input node
                 false
             } else {
@@ -318,14 +320,14 @@ impl<S: ElementStrategy> Environment<S> {
     pub fn generate_genome(&mut self, n_inputs: usize, n_outputs: usize) -> NetworkGenome {
         assert!(n_inputs > 0 && n_outputs > 0);
         let mut nodes = InnovationContainer::new();
-        for _ in 0..n_inputs {
+        for i in 0..n_inputs {
             nodes.insert(self.node_innovation_counter.next().unwrap(),
-                         NodeGene { node_type: NodeType::Input });
+                         NodeGene { node_type: NodeType::Input(i as u32) });
         }
         assert!(nodes.len() == n_inputs);
-        for _ in 0..n_outputs {
+        for i in 0..n_outputs {
             nodes.insert(self.node_innovation_counter.next().unwrap(),
-                         NodeGene { node_type: NodeType::Output });
+                         NodeGene { node_type: NodeType::Output(i as u32) });
         }
         assert!(nodes.len() == n_inputs + n_outputs);
         NetworkGenome {
