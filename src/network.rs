@@ -134,7 +134,23 @@ impl NetworkGenome {
         let (adj_matrix, rev_map) = self.adjacency_matrix();
 
         // Construct an array of all currently unconnected nodes.
-        let unconnected = adj_matrix.transitive_closure().unconnected_pairs_no_cycle();
+        let mut unconnected = adj_matrix.transitive_closure().unconnected_pairs_no_cycle();
+
+        // additionally, we want to make sure, that there are only outgoing links from input nodes
+        // (no incoming links), and only incoming links to output nodes.
+        unconnected.retain(|&(source, target)| {
+            if let Some(&NodeGene{node_type: NodeType::Output, ..}) = self.node_genes
+                                                                          .get(&rev_map[source]) {
+                // reject if source is an output node
+                false
+            } else if let Some(&NodeGene{node_type: NodeType::Input, ..}) = self.node_genes
+                                                                         .get(&rev_map[target]) {
+                // reject if target is an input node
+                false
+            } else {
+                true
+            }
+        });
 
         // Out of all unconnected pairs, choose a random one.
         rng.choose(&unconnected).map(|&(source, target)| {
