@@ -174,27 +174,28 @@ impl Distance<NetworkGenome> for NetworkGenomeDistance {
     }
 }
 
-pub trait LinkWeightStrategy {
+/// This trait is used to specialize link weight creation and node activation function creation.
+pub trait ElementStrategy {
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64;
     fn random_activation_function<R: Rng>(rng: &mut R) -> u32;
 }
 
 #[derive(Debug)]
-pub struct Environment<LINK: LinkWeightStrategy> {
+pub struct Environment<S: ElementStrategy> {
     node_innovation_counter: Innovation,
     link_innovation_counter: Innovation,
     // (src_node, target_node) -> link_innovation
     link_innovation_cache: BTreeMap<(Innovation, Innovation), Innovation>,
-    _marker_link: PhantomData<LINK>,
+    _marker_s: PhantomData<S>,
 }
 
-impl<LINK: LinkWeightStrategy> Environment<LINK> {
-    pub fn new() -> Environment<LINK> {
+impl<S: ElementStrategy> Environment<S> {
+    pub fn new() -> Environment<S> {
         Environment {
             node_innovation_counter: Innovation::new(0),
             link_innovation_counter: Innovation::new(0),
             link_innovation_cache: BTreeMap::new(),
-            _marker_link: PhantomData,
+            _marker_s: PhantomData,
         }
     }
 
@@ -257,7 +258,7 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
         genome.find_random_unconnected_pair(rng).map(|(src, target)| {
             let mut offspring = genome.clone();
             // Add new link to the offspring genome
-            self.add_link(&mut offspring, src, target, LINK::random_link_weight(rng));
+            self.add_link(&mut offspring, src, target, S::random_link_weight(rng));
             offspring
         })
     }
@@ -276,7 +277,7 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
                      .insert(new_node_innovation,
                              NodeGene {
                                  node_type: NodeType::Hidden,
-                                 activation_function: Some(LINK::random_activation_function(rng)),
+                                 activation_function: Some(S::random_activation_function(rng)),
                              });
             // disable `link_innov` in offspring
             // we keep this gene (but disable it), because this allows us to have a structurally
@@ -292,11 +293,11 @@ impl<LINK: LinkWeightStrategy> Environment<LINK> {
             self.add_link(&mut offspring,
                           orig_src_node,
                           new_node_innovation,
-                          LINK::random_link_weight(rng));
+                          S::random_link_weight(rng));
             self.add_link(&mut offspring,
                           new_node_innovation,
                           orig_target_node,
-                          LINK::random_link_weight(rng));
+                          S::random_link_weight(rng));
             offspring
         })
     }

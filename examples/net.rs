@@ -6,7 +6,7 @@ extern crate closed01;
 
 use neat::population::{Population, Unrated, Runner};
 use neat::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment,
-                    LinkWeightStrategy};
+                    ElementStrategy};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
@@ -94,10 +94,9 @@ impl FitnessEvaluator {
     }
 }
 
-#[derive(Debug)]
-struct LinkWeightS;
+struct ES;
 
-impl LinkWeightStrategy for LinkWeightS {
+impl ElementStrategy for ES {
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
         // XXX Choose a weight between -1 and 1?
         rng.gen()
@@ -111,7 +110,7 @@ const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
-struct Mater<'a, T: LinkWeightStrategy + 'a> {
+struct Mater<'a, T: ElementStrategy + 'a> {
     // probability for crossover. P_mutate = 1.0 - p_crossover
     p_crossover: Closed01<f32>,
     p_crossover_detail: ProbabilisticCrossover,
@@ -119,7 +118,7 @@ struct Mater<'a, T: LinkWeightStrategy + 'a> {
     env: &'a mut Environment<T>,
 }
 
-impl<'a, T: LinkWeightStrategy> Mate<NetworkGenome> for Mater<'a, T> {
+impl<'a, T: ElementStrategy> Mate<NetworkGenome> for Mater<'a, T> {
     // Add an argument that descibes whether both genomes are of equal fitness.
     // Pass individual, which includes the fitness.
     fn mate<R: Rng>(&mut self,
@@ -147,7 +146,7 @@ fn main() {
     println!("{:?}", fitness_evaluator);
 
     // start with minimal random topology.
-    let mut env: Environment<LinkWeightS> = Environment::new();
+    let mut env: Environment<ES> = Environment::new();
 
     let template_genome = env.generate_genome(INPUTS, OUTPUTS);
 
