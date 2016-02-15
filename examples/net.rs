@@ -56,7 +56,7 @@ fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
 
     for link in genome.link_genes.map.values() {
         if link.active {
-            builder.add_edge_unweighted(link.source_node_gene.get(), link.target_node_gene.get());
+            builder.add_edge(link.source_node_gene.get(), link.target_node_gene.get(), closed01::Closed01::new(link.weight as f32));
         }
     }
 
