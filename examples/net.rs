@@ -3,6 +3,7 @@ extern crate rand;
 extern crate graph_neighbor_matching;
 extern crate graph_io_gml as gml;
 extern crate closed01;
+extern crate petgraph;
 
 use neat::population::{Population, Unrated, Runner};
 use neat::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment,
@@ -11,11 +12,13 @@ use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
 use neat::prob::is_probable;
-use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
+use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching, Graph};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
+use petgraph::Graph as PetGraph;
+use petgraph::Directed;
 
 fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
     use std::fs::File;
@@ -35,7 +38,7 @@ fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
                                            match s {
                                                "input" => NodeType::Input,
                                                "output" => NodeType::Output,
-                                               "hidden" => NodeType::Hidden,
+                                               "hidden" => NodeType::Hidden{activation_function: 0}, // XXX
                                                _ => panic!("Invalid node type/weight"),
                                            }
                                        })
@@ -43,7 +46,7 @@ fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
                                },
                                &|_| -> Option<()> { Some(()) })
                     .unwrap();
-    OwnedGraph::from_petgraph(&graph)
+    OwnedGraph::from_petgraph(&graph, NodeType::Hidden{activation_function: 0})
 }
 
 fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
@@ -63,6 +66,14 @@ fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
     return builder.graph();
 }
 
+// Treats the graph as CPPN and constructs a graph.
+// For the output node (there should be only one!), recursively build up a function
+/* fn genome_to_graph_hyperneat(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
+    let graph = genome_to_graph(genome);
+    let petgraph = graph.to_petgraph();
+    graph
+}*/
+
 #[derive(Debug)]
 struct FitnessEvaluator {
     target_graph: OwnedGraph<NodeType>,
@@ -76,7 +87,14 @@ impl NodeColorMatching<NodeType> for NodeColors {
                            node_i_value: &NodeType,
                            node_j_value: &NodeType)
                            -> closed01::Closed01<f32> {
-        if node_i_value == node_j_value {
+
+        // Treat Hidden nodes as equal regardless of their activation function.
+        let eq = match (node_i_value, node_j_value) {
+            (&NodeType::Hidden{..}, &NodeType::Hidden{..}) => true,
+            (a, b) => a == b,
+        };
+
+        if eq {
             closed01::Closed01::one()
         } else {
             closed01::Closed01::zero()

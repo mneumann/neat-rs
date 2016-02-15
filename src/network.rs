@@ -12,20 +12,14 @@ use super::mutate::MutateMethod;
 pub enum NodeType {
     Input,
     Output,
-    Hidden,
-}
-
-impl Default for NodeType {
-    fn default() -> Self {
-        NodeType::Hidden
-    }
+    Hidden {
+        activation_function: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub struct NodeGene {
     pub node_type: NodeType,
-    /// an activation function is only useful for hidden nodes
-    pub activation_function: Option<u32>,
 }
 
 impl Gene for NodeGene {}
@@ -292,8 +286,9 @@ impl<S: ElementStrategy> Environment<S> {
             offspring.node_genes
                      .insert(new_node_innovation,
                              NodeGene {
-                                 node_type: NodeType::Hidden,
-                                 activation_function: Some(S::random_activation_function(rng)),
+                                 node_type: NodeType::Hidden {
+                                     activation_function: S::random_activation_function(rng),
+                                 },
                              });
             // disable `link_innov` in offspring
             // we keep this gene (but disable it), because this allows us to have a structurally
@@ -325,18 +320,12 @@ impl<S: ElementStrategy> Environment<S> {
         let mut nodes = InnovationContainer::new();
         for _ in 0..n_inputs {
             nodes.insert(self.node_innovation_counter.next().unwrap(),
-                         NodeGene {
-                             node_type: NodeType::Input,
-                             activation_function: None,
-                         });
+                         NodeGene { node_type: NodeType::Input });
         }
         assert!(nodes.len() == n_inputs);
         for _ in 0..n_outputs {
             nodes.insert(self.node_innovation_counter.next().unwrap(),
-                         NodeGene {
-                             node_type: NodeType::Output,
-                             activation_function: None,
-                         });
+                         NodeGene { node_type: NodeType::Output });
         }
         assert!(nodes.len() == n_inputs + n_outputs);
         NetworkGenome {
