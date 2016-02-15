@@ -22,9 +22,33 @@ use petgraph::{Directed, EdgeDirection};
 use petgraph::graph::NodeIndex;
 use std::collections::BTreeMap;
 use cppn::bipolar::{Linear, Gaussian, Sigmoid, Sine};
+// use cppn::bipolar::closed01bipolar::Closed01Bipolar;
 use cppn::ActivationFunction;
+use std::fmt::Debug;
 
-fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
+fn node_type_from_str(s: &str) -> NodeType {
+    match s {
+        "input" => NodeType::Input(0), // XXX
+        "output" => NodeType::Output(0), // XXX
+        "hidden" => NodeType::Hidden { activation_function: 0 }, // XXX
+        _ => panic!("Invalid node type/weight"),
+    }
+}
+
+fn neuron_type_from_str(s: &str) -> NeuronType {
+    match s {
+        "input" => NeuronType::Input,
+        "output" => NeuronType::Output,
+        "hidden" => NeuronType::Hidden,
+        _ => panic!("Invalid node type/weight"),
+    }
+}
+
+// NT is the returned node type
+fn load_graph<NT, F>(graph_file: &str, node_weight_fn: &F) -> OwnedGraph<NT>
+    where F: Fn(&str) -> NT,
+          NT: Clone + Debug
+{
     use std::fs::File;
     use std::io::Read;
 
@@ -36,23 +60,12 @@ fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
     };
 
     let graph = gml::parse_gml(&graph_s,
-                               &|sexp| -> Option<NodeType> {
-                                   sexp.and_then(|se| {
-                                       se.get_str().map(|s| {
-                                           match s {
-                                               "input" => NodeType::Input(0), // XXX
-                                               "output" => NodeType::Output(0), // XXX
-                                               "hidden" => {
-                                                   NodeType::Hidden { activation_function: 0 }
-                                               } // XXX
-                                               _ => panic!("Invalid node type/weight"),
-                                           }
-                                       })
-                                   })
+                               &|sexp| -> Option<NT> {
+                                   sexp.and_then(|se| se.get_str().map(|s| node_weight_fn(s)))
                                },
                                &|_| -> Option<()> { Some(()) })
                     .unwrap();
-    OwnedGraph::from_petgraph(&graph, NodeType::Hidden { activation_function: 0 })
+    OwnedGraph::from_petgraph(&graph)
 }
 
 fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
@@ -181,12 +194,17 @@ impl Cppn {
         self.graph.set_node_value(self.inputs[&n], value);
     }
 
-    pub fn evaluate(&mut self, inputs: &[f64]) -> Vec<(u32, f64)> {
-        assert!(inputs.len() == self.inputs.len());
+    pub fn evaluate(&mut self, inputs: &[&[f64]]) -> Vec<(u32, f64)> {
         self.graph.reset();
-        for (i, &input) in inputs.iter().enumerate() {
-            self.set_input(i as u32, input);
+
+        let mut i_cnt = 0;
+        for input_list in inputs.iter() {
+            for &input in input_list.iter() {
+                self.set_input(i_cnt as u32, input);
+                i_cnt += 1;
+            }
         }
+        assert!(i_cnt == self.inputs.len());
 
         let mut output_values = Vec::new();
         // calculate new values for each output node
@@ -196,6 +214,22 @@ impl Cppn {
 
         output_values
     }
+}
+
+// Represents a position within the substrate.
+trait Position {
+    fn as_slice(&self) -> &[f64];
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum NeuronType {
+    Input,
+    Output,
+    Hidden,
+}
+
+struct Substrate<T: Position> {
+    neurons: Vec<(NeuronType, T)>,
 }
 
 // Treats the graph as CPPN and constructs a graph.
@@ -267,6 +301,19 @@ impl NodeColorMatching<NodeType> for NodeColors {
     }
 }
 
+impl NodeColorMatching<NeuronType> for NodeColors {
+    fn node_color_matching(&self,
+                           node_i_value: &NeuronType,
+                           node_j_value: &NeuronType)
+                           -> closed01::Closed01<f32> {
+        if node_i_value == node_j_value {
+            closed01::Closed01::one()
+        } else {
+            closed01::Closed01::zero()
+        }
+    }
+}
+
 impl FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &NetworkGenome) -> f32 {
@@ -326,7 +373,9 @@ impl<'a, T: ElementStrategy> Mate<NetworkGenome> for Mater<'a, T> {
 fn main() {
     let mut rng = rand::thread_rng();
 
-    let fitness_evaluator = FitnessEvaluator { target_graph: load_graph("examples/jeffress.gml") };
+    let fitness_evaluator = FitnessEvaluator {
+        target_graph: load_graph("examples/jeffress.gml", &node_type_from_str),
+    };
     println!("{:?}", fitness_evaluator);
 
     // start with minimal random topology.
