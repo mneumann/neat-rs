@@ -21,7 +21,8 @@ use petgraph::Graph as PetGraph;
 use petgraph::{Directed, EdgeDirection};
 use petgraph::graph::NodeIndex;
 use std::collections::BTreeMap;
-use cppn::bipolar::{ActivationFunction, Linear, Gaussian, Sigmoid, Sine};
+use cppn::bipolar::{Linear, Gaussian, Sigmoid, Sine};
+use cppn::ActivationFunction;
 
 fn load_graph(graph_file: &str) -> OwnedGraph<NodeType> {
     use std::fs::File;
@@ -96,10 +97,10 @@ impl CppnGraph {
                 // Null
                 input
             }
-            1 => Linear::calculate(input).get(),
-            2 => Gaussian::calculate(input).get(),
-            3 => Sigmoid::calculate(input).get(),
-            4 => Sine::calculate(input).get(),
+            1 => Linear::calculate(input).into(),
+            2 => Gaussian::calculate(input).into(),
+            3 => Sigmoid::calculate(input).into(),
+            4 => Sine::calculate(input).into(),
             _ => {
                 panic!("invalid activation function");
             }

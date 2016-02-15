@@ -29,7 +29,7 @@ dependencies = [
 [[package]]
 name = "cppn"
 version = "0.0.1"
-source = "git+https://github.com/mneumann/cppn-rs#94bd8095fba81c1754487cce2e6ebab95bfaaf96"
+source = "git+https://github.com/mneumann/cppn-rs#c95d3768b5b4563aab095098d8a352b9dbc07af7"
 
 [[package]]
 name = "deque"
