@@ -97,7 +97,15 @@ impl FitnessEvaluator {
 #[derive(Debug)]
 struct LinkWeightS;
 
-impl LinkWeightStrategy for LinkWeightS {}
+impl LinkWeightStrategy for LinkWeightS {
+    fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
+        // XXX Choose a weight between -1 and 1?
+        rng.gen()
+    }
+    fn random_activation_function<R: Rng>(rng: &mut R) -> u32 {
+        rng.gen_range(0, 5)
+    }
+}
 
 const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;

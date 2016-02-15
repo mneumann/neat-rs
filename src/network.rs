@@ -175,13 +175,8 @@ impl Distance<NetworkGenome> for NetworkGenomeDistance {
 }
 
 pub trait LinkWeightStrategy {
-    fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
-        // XXX Choose a weight between -1 and 1?
-        rng.gen()
-    }
-    fn random_activation_function<R: Rng>(rng: &mut R) -> u32 {
-        rng.gen_range(0, 5)
-    }
+    fn random_link_weight<R: Rng>(rng: &mut R) -> f64;
+    fn random_activation_function<R: Rng>(rng: &mut R) -> u32;
 }
 
 #[derive(Debug)]
