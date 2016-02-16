@@ -1,0 +1,9 @@
+[ ] The way we do crossover right now can easily introduce cycles in
+    the graph. We want to avoid that. For every excess or disjoint gene,
+    check if it creates a cycle. Matching genes cannot introduce cycles.
+[ ] Implement the mutation of weights.
+[ ] Add DeleteConnection structural mutation
+[ ] Include node gene compatibility into the overall compatibility measure
+    for speciation.
+[ ] Think about using a mutation method based on the crossover of matching
+    genes, using a method to combine their weights.
