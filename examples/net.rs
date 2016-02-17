@@ -6,7 +6,8 @@ extern crate closed01;
 extern crate petgraph;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment, ElementStrategy};
+use neat::genomes::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment,
+                             ElementStrategy};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;

@@ -7,7 +7,8 @@ extern crate petgraph;
 extern crate cppn;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment, ElementStrategy};
+use neat::genomes::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment,
+                             ElementStrategy};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
@@ -22,6 +23,8 @@ use std::collections::BTreeMap;
 use cppn::bipolar::{Linear, Gaussian, Sigmoid, Sine};
 use cppn::{Identity, ActivationFunction};
 use cppn::cppn::{Cppn, CppnGraph, CppnNodeType};
+use cppn::position::{Position, Position2d};
+use cppn::substrate::Substrate;
 
 fn neuron_type_from_str(s: &str) -> NeuronType {
     match s {
@@ -69,20 +72,6 @@ fn make_activation_function(f: u32) -> Box<ActivationFunction> {
     }
 }
 
-// Represents a position within the substrate.
-trait Position {
-    fn as_slice(&self) -> &[f64];
-}
-
-struct Position2d([f64; 2]);
-
-impl Position for Position2d {
-    fn as_slice(&self) -> &[f64] {
-        &self.0
-    }
-}
-
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum NeuronType {
     Input,
@@ -90,70 +79,27 @@ enum NeuronType {
     Hidden,
 }
 
-struct Neuron<P: Position> {
-    neuron_type: NeuronType,
-    position: P,
-}
+fn develop_graph_from_substrate<P: Position, T: Clone + Debug>(substrate: &Substrate<P, T>,
+                                                               cppn: &mut Cppn)
+                                                               -> OwnedGraph<T> {
+    let mut builder = GraphBuilder::new();
 
-struct Substrate<P: Position> {
-    neurons: Vec<Neuron<P>>,
-}
-
-impl<P: Position> Substrate<P> {
-    fn new() -> Substrate<P> {
-        Substrate { neurons: Vec::new() }
+    for (i, node) in substrate.nodes().iter().enumerate() {
+        let _ = builder.add_node(i, node.data.clone());
     }
 
-    fn add_neuron(&mut self, neuron: Neuron<P>) {
-        self.neurons.push(neuron);
-    }
-
-    fn develop_edgelist(&self, cppn: &mut Cppn) -> Vec<(usize, usize, f64)> {
-        let mut edge_list = Vec::new();
-        for (i, neuron_i) in self.neurons.iter().enumerate() {
-            for (j, neuron_j) in self.neurons.iter().enumerate() {
-                if i != j {
-                    // XXX: limit based on distance
-                    // evalute cppn for coordinates of neuron_i and neuron_j
-                    let inputs = [neuron_i.position.as_slice(), neuron_j.position.as_slice()];
-
-                    let outputs = cppn.calculate(&inputs);
-                    assert!(outputs.len() == 1);
-                    let weight = outputs[0];
-                    // XXX: cut off weight. direction
-                    if weight >= 0.0 && weight <= 1.0 {
-                        edge_list.push((i, j, weight));
-                    }
-                }
-            }
+    for link in substrate.iter_links(cppn, None) {
+        if link.weight >= 0.0 && link.weight <= 1.0 {
+            builder.add_edge(link.source_idx,
+                             link.target_idx,
+                             closed01::Closed01::new(link.weight as f32));
         }
-        edge_list
     }
 
-    fn develop_graph(&self, cppn: &mut Cppn) -> OwnedGraph<NeuronType> {
-        let mut builder = GraphBuilder::new();
+    let graph = builder.graph();
+    // println!("graph: {:#?}", graph);
 
-        for (i, neuron_i) in self.neurons.iter().enumerate() {
-            let _ = builder.add_node(i, neuron_i.neuron_type);
-        }
-
-        let edgelist = self.develop_edgelist(cppn);
-        for (source, target, weight) in edgelist {
-            let w = if weight > 1.0 {
-                1.0
-            } else if weight < 0.0 {
-                0.0
-            } else {
-                weight
-            };
-            builder.add_edge(source, target, closed01::Closed01::new(w as f32));
-        }
-
-        let graph = builder.graph();
-        // println!("graph: {:#?}", graph);
-
-        return graph;
-    }
+    return graph;
 }
 
 // Treats the graph as CPPN and constructs a graph.
@@ -213,29 +159,14 @@ impl FitnessEvaluatorCppn {
         let mut cppn = genome_to_cppn(genome);
 
         let mut substrate = Substrate::new();
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Input,
-            position: Position2d([-1.0, -1.0]),
-        });
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Input,
-            position: Position2d([-1.0, 1.0]),
-        });
+        substrate.add_node(Position2d::new(-1.0, -1.0), NeuronType::Input);
+        substrate.add_node(Position2d::new(1.0, -1.0), NeuronType::Input);
 
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Output,
-            position: Position2d([-1.0, 1.0]),
-        });
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Output,
-            position: Position2d([0.0, 1.0]),
-        });
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Output,
-            position: Position2d([1.0, 1.0]),
-        });
+        substrate.add_node(Position2d::new(-1.0, 1.0), NeuronType::Output);
+        substrate.add_node(Position2d::new(0.0, 1.0), NeuronType::Output);
+        substrate.add_node(Position2d::new(1.0, 1.0), NeuronType::Output);
 
-        let graph = substrate.develop_graph(&mut cppn);
+        let graph = develop_graph_from_substrate(&substrate, &mut cppn);
 
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);

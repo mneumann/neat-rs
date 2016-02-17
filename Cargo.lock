@@ -29,9 +29,10 @@ dependencies = [
 [[package]]
 name = "cppn"
 version = "0.0.1"
-source = "git+https://github.com/mneumann/cppn-rs#a81b433cf40d931968834615b9dbdeda2aeea042"
+source = "git+https://github.com/mneumann/cppn-rs#82ad2931e5af63d0fc38bad0826669cc7cfac8c5"
 dependencies = [
  "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
