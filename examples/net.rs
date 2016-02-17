@@ -4,7 +4,6 @@ extern crate graph_neighbor_matching;
 extern crate graph_io_gml as gml;
 extern crate closed01;
 extern crate petgraph;
-extern crate cppn;
 
 use neat::population::{Population, Unrated, Runner};
 use neat::genomes::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment, ElementStrategy};
@@ -12,34 +11,18 @@ use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
 use neat::prob::is_probable;
-use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching, Graph};
+use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
 use std::fmt::Debug;
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
-use petgraph::Graph as PetGraph;
-use petgraph::{Directed, EdgeDirection};
-use petgraph::graph::NodeIndex;
-use std::collections::BTreeMap;
-use cppn::bipolar::{Linear, Gaussian, Sigmoid, Sine};
-use cppn::{Identity, ActivationFunction};
-use cppn::cppn::{Cppn, CppnGraph, CppnNodeType};
 
 fn node_type_from_str(s: &str) -> NodeType {
     match s {
         "input" => NodeType::Input,
         "output" => NodeType::Output,
         "hidden" => NodeType::Hidden { activation_function: 0 }, // XXX
-        _ => panic!("Invalid node type/weight"),
-    }
-}
-
-fn neuron_type_from_str(s: &str) -> NeuronType {
-    match s {
-        "input" => NeuronType::Input,
-        "output" => NeuronType::Output,
-        "hidden" => NeuronType::Hidden,
         _ => panic!("Invalid node type/weight"),
     }
 }
@@ -87,136 +70,6 @@ fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
     return builder.graph();
 }
 
-fn make_activation_function(f: u32) -> Box<ActivationFunction> {
-    match f {
-        0 => Box::new(Identity),
-        1 => Box::new(Linear),
-        2 => Box::new(Gaussian),
-        3 => Box::new(Sigmoid),
-        4 => Box::new(Sine),
-        _ => {
-            panic!("invalid activation function");
-        }
-    }
-}
-
-// Represents a position within the substrate.
-trait Position {
-    fn as_slice(&self) -> &[f64];
-}
-
-struct Position2d([f64; 2]);
-
-impl Position for Position2d {
-    fn as_slice(&self) -> &[f64] {
-        &self.0
-    }
-}
-
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum NeuronType {
-    Input,
-    Output,
-    Hidden,
-}
-
-struct Neuron<P: Position> {
-    neuron_type: NeuronType,
-    position: P,
-}
-
-struct Substrate<P: Position> {
-    neurons: Vec<Neuron<P>>,
-}
-
-impl<P: Position> Substrate<P> {
-    fn new() -> Substrate<P> {
-        Substrate { neurons: Vec::new() }
-    }
-
-    fn add_neuron(&mut self, neuron: Neuron<P>) {
-        self.neurons.push(neuron);
-    }
-
-    fn develop_edgelist(&self, cppn: &mut Cppn) -> Vec<(usize, usize, f64)> {
-        let mut edge_list = Vec::new();
-        for (i, neuron_i) in self.neurons.iter().enumerate() {
-            for (j, neuron_j) in self.neurons.iter().enumerate() {
-                if i != j {
-                    // XXX: limit based on distance
-                    // evalute cppn for coordinates of neuron_i and neuron_j
-                    let inputs = [neuron_i.position.as_slice(), neuron_j.position.as_slice()];
-
-                    let outputs = cppn.calculate(&inputs);
-                    assert!(outputs.len() == 1);
-                    let weight = outputs[0];
-                    // XXX: cut off weight. direction
-                    if weight >= 0.0 && weight <= 1.0 {
-                        edge_list.push((i, j, weight));
-                    }
-                }
-            }
-        }
-        edge_list
-    }
-
-    fn develop_graph(&self, cppn: &mut Cppn) -> OwnedGraph<NeuronType> {
-        let mut builder = GraphBuilder::new();
-
-        for (i, neuron_i) in self.neurons.iter().enumerate() {
-            let _ = builder.add_node(i, neuron_i.neuron_type);
-        }
-
-        let edgelist = self.develop_edgelist(cppn);
-        for (source, target, weight) in edgelist {
-            let w = if weight > 1.0 {
-                1.0
-            } else if weight < 0.0 {
-                0.0
-            } else {
-                weight
-            };
-            builder.add_edge(source, target, closed01::Closed01::new(w as f32));
-        }
-
-        let graph = builder.graph();
-        // println!("graph: {:#?}", graph);
-
-        return graph;
-    }
-}
-
-// Treats the graph as CPPN and constructs a graph.
-fn genome_to_cppn(genome: &NetworkGenome) -> Cppn {
-    let mut node_map = BTreeMap::new();
-    let mut g = CppnGraph::new();
-
-    for (&innov, node) in genome.node_genes.map.iter() {
-        // make sure the node exists, even if there are no connection to it.
-        let node_idx = match node.node_type {
-            NodeType::Input => g.add_node(CppnNodeType::Input, make_activation_function(0)),
-            NodeType::Output => g.add_node(CppnNodeType::Output, make_activation_function(0)),
-            NodeType::Hidden{activation_function} => {
-                g.add_node(CppnNodeType::Hidden,
-                           make_activation_function(activation_function))
-            }
-        };
-
-        node_map.insert(innov.get(), node_idx);
-    }
-
-    for link in genome.link_genes.map.values() {
-        if link.active {
-            g.add_link(node_map[&link.source_node_gene.get()],
-                       node_map[&link.target_node_gene.get()],
-                       link.weight);
-        }
-    }
-
-    Cppn::new(g)
-}
-
 #[derive(Debug)]
 struct NodeColors;
 
@@ -242,19 +95,6 @@ impl NodeColorMatching<NodeType> for NodeColors {
     }
 }
 
-impl NodeColorMatching<NeuronType> for NodeColors {
-    fn node_color_matching(&self,
-                           node_i_value: &NeuronType,
-                           node_j_value: &NeuronType)
-                           -> closed01::Closed01<f32> {
-        if node_i_value == node_j_value {
-            closed01::Closed01::one()
-        } else {
-            closed01::Closed01::zero()
-        }
-    }
-}
-
 #[derive(Debug)]
 struct FitnessEvaluator {
     target_graph: OwnedGraph<NodeType>,
@@ -269,49 +109,6 @@ impl FitnessEvaluator {
         s.score_optimal_sum_norm(None, ScoreNorm::MaxDegree).get()
     }
 }
-
-
-#[derive(Debug)]
-struct FitnessEvaluatorCppn {
-    target_graph: OwnedGraph<NeuronType>,
-}
-
-impl FitnessEvaluatorCppn {
-    // A larger fitness means "better"
-    fn fitness(&self, genome: &NetworkGenome) -> f32 {
-        let mut cppn = genome_to_cppn(genome);
-
-        let mut substrate = Substrate::new();
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Input,
-            position: Position2d([-1.0, -1.0]),
-        });
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Input,
-            position: Position2d([-1.0, 1.0]),
-        });
-
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Output,
-            position: Position2d([-1.0, 1.0]),
-        });
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Output,
-            position: Position2d([0.0, 1.0]),
-        });
-        substrate.add_neuron(Neuron {
-            neuron_type: NeuronType::Output,
-            position: Position2d([1.0, 1.0]),
-        });
-
-        let graph = substrate.develop_graph(&mut cppn);
-
-        let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
-        s.iterate(50, 0.01);
-        s.score_optimal_sum_norm(None, ScoreNorm::MaxDegree).get()
-    }
-}
-
 
 struct ES;
 
@@ -362,13 +159,8 @@ impl<'a, T: ElementStrategy> Mate<NetworkGenome> for Mater<'a, T> {
 fn main() {
     let mut rng = rand::thread_rng();
 
-    // let fitness_evaluator = FitnessEvaluator {
-    // target_graph: load_graph("examples/jeffress.gml", &node_type_from_str),
-    // };
-    //
-
-    let fitness_evaluator = FitnessEvaluatorCppn {
-        target_graph: load_graph("examples/jeffress.gml", &neuron_type_from_str),
+    let fitness_evaluator = FitnessEvaluator {
+        target_graph: load_graph("examples/jeffress.gml", &node_type_from_str),
     };
 
     println!("{:?}", fitness_evaluator);
@@ -376,9 +168,7 @@ fn main() {
     // start with minimal random topology.
     let mut env: Environment<ES> = Environment::new();
 
-    // let template_genome = env.generate_genome(INPUTS, OUTPUTS);
-    // 4 inputs for 2xcoordinate pairs.
-    let template_genome = env.generate_genome(4, 1);
+    let template_genome = env.generate_genome(INPUTS, OUTPUTS);
 
     println!("{:#?}", template_genome);
 
