@@ -29,7 +29,10 @@ dependencies = [
 [[package]]
 name = "cppn"
 version = "0.0.1"
-source = "git+https://github.com/mneumann/cppn-rs#59c07afdc65b2612630026ee4e57e50d97e7a4d5"
+source = "git+https://github.com/mneumann/cppn-rs#a81b433cf40d931968834615b9dbdeda2aeea042"
+dependencies = [
+ "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "deque"
@@ -99,14 +102,14 @@ name = "nalgebra"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "num 0.1.30 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.18 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "num"
-version = "0.1.30"
+version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -142,7 +145,7 @@ dependencies = [
 [[package]]
 name = "rayon"
 version = "0.2.0"
-source = "git+https://github.com/nikomatsakis/rayon#8520eb64d043c19c399a0d87c0a506e207902882"
+source = "git+https://github.com/nikomatsakis/rayon#0db5de8daccddb1090a0a610fa4734e3b39f2490"
 dependencies = [
  "deque 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",

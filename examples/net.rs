@@ -16,15 +16,15 @@ use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching, Gr
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
+use std::fmt::Debug;
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
 use petgraph::Graph as PetGraph;
 use petgraph::{Directed, EdgeDirection};
 use petgraph::graph::NodeIndex;
 use std::collections::BTreeMap;
 use cppn::bipolar::{Linear, Gaussian, Sigmoid, Sine};
-// use cppn::bipolar::closed01bipolar::Closed01Bipolar;
-use cppn::ActivationFunction;
-use std::fmt::Debug;
+use cppn::{Identity, ActivationFunction};
+use cppn::cppn::{Cppn, CppnGraph, CppnNodeType};
 
 fn node_type_from_str(s: &str) -> NodeType {
     match s {
@@ -87,132 +87,16 @@ fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
     return builder.graph();
 }
 
-struct CppnNode {
-    value: Option<f64>,
-    node_type: NodeType,
-}
-
-struct CppnGraph {
-    graph: PetGraph<CppnNode, f64, Directed>,
-}
-
-// A Compositional Pattern Producing Network (CPPN)
-struct Cppn {
-    graph: CppnGraph,
-    inputs: BTreeMap<u32, NodeIndex>,
-    outputs: BTreeMap<u32, NodeIndex>,
-}
-
-impl CppnGraph {
-    fn eval_activation_function(activation_function: u32, input: f64) -> f64 {
-        match activation_function {
-            0 => {
-                // Null
-                input
-            }
-            1 => Linear::calculate(input).into(),
-            2 => Gaussian::calculate(input).into(),
-            3 => Sigmoid::calculate(input).into(),
-            4 => Sine::calculate(input).into(),
-            _ => {
-                panic!("invalid activation function");
-            }
+fn make_activation_function(f: u32) -> Box<ActivationFunction> {
+    match f {
+        0 => Box::new(Identity),
+        1 => Box::new(Linear),
+        2 => Box::new(Gaussian),
+        3 => Box::new(Sigmoid),
+        4 => Box::new(Sine),
+        _ => {
+            panic!("invalid activation function");
         }
-    }
-
-    /// Reset all cached values to None.
-    fn reset(&mut self) {
-        for idx in self.graph.node_indices() {
-            self.graph.node_weight_mut(idx).unwrap().value = None;
-        }
-    }
-
-    fn get_node_value(&self, idx: NodeIndex) -> f64 {
-        self.graph.node_weight(idx).unwrap().value.unwrap()
-    }
-
-    fn set_node_value(&mut self, idx: NodeIndex, value: f64) {
-        self.graph.node_weight_mut(idx).unwrap().value = Some(value);
-    }
-
-    fn sum_incoming_links(&mut self, idx: NodeIndex) -> f64 {
-        let mut sum: f64 = 0.0;
-
-        // evaluate all incoming nodes
-        let mut walker = self.graph.neighbors_directed(idx, EdgeDirection::Incoming).detach();
-        while let Some((edge_idx, node_idx)) = walker.next(&self.graph) {
-            let value = self.eval_node(node_idx);
-            let weight = self.graph.edge_weight(edge_idx).unwrap();
-
-            sum += weight * value;
-        }
-
-        return sum;
-    }
-
-    /// Recursively evaluate this node and all dependent nodes.
-    fn eval_node(&mut self, idx: NodeIndex) -> f64 {
-        // check if we have a cached value, and return it
-        if let Some(w) = self.graph.node_weight(idx).unwrap().value {
-            return w;
-        }
-
-        // check again
-        let new_value = match self.graph.node_weight(idx).unwrap().node_type {
-            NodeType::Input(..) => {
-                // There must be a value for an input.
-                panic!();
-            }
-            NodeType::Output(n) => {
-                // An output node simply sums up all incoming links.
-                // there is no activation function applied.
-                self.sum_incoming_links(idx)
-            }
-            NodeType::Hidden{activation_function} => {
-                let sum = self.sum_incoming_links(idx);
-                // apply the activation function to the incoming signal.
-                CppnGraph::eval_activation_function(activation_function, sum)
-            }
-        };
-
-        // update the cache value.
-        self.graph.node_weight_mut(idx).unwrap().value = Some(new_value);
-
-        return new_value;
-    }
-}
-
-impl Cppn {
-    /// Read the `n`-th output value.
-    /// Panics if the value has not been calculated before or is out of bounds.
-    pub fn read_output(&self, n: u32) -> f64 {
-        self.graph.get_node_value(self.outputs[&n])
-    }
-
-    /// Set the `n`-th input to `value`
-    fn set_input(&mut self, n: u32, value: f64) {
-        self.graph.set_node_value(self.inputs[&n], value);
-    }
-
-    pub fn evaluate(&mut self, inputs: &[&[f64]]) -> Vec<(u32, f64)> {
-        self.graph.reset();
-
-        let mut i_cnt = 0;
-        for input_list in inputs.iter() {
-            for &input in input_list.iter() {
-                self.set_input(i_cnt as u32, input);
-                i_cnt += 1;
-            }
-        }
-        assert!(i_cnt == self.inputs.len());
-
-        let mut output_values = Vec::new();
-        // calculate new values for each output node
-        for (&i, &output_node_idx) in self.outputs.iter() {
-            output_values.push((i, self.graph.eval_node(output_node_idx)));
-        }
-
-        output_values
     }
 }
 
@@ -264,9 +148,9 @@ impl<P: Position> Substrate<P> {
                     // evalute cppn for coordinates of neuron_i and neuron_j
                     let inputs = [neuron_i.position.as_slice(), neuron_j.position.as_slice()];
 
-                    let outputs = cppn.evaluate(&inputs);
+                    let outputs = cppn.calculate(&inputs);
                     assert!(outputs.len() == 1);
-                    let weight = outputs[0].1;
+                    let weight = outputs[0];
                     // XXX: cut off weight. direction
                     if weight >= 0.0 && weight <= 1.0 {
                         edge_list.push((i, j, weight));
@@ -305,41 +189,32 @@ impl<P: Position> Substrate<P> {
 
 // Treats the graph as CPPN and constructs a graph.
 fn genome_to_cppn(genome: &NetworkGenome) -> Cppn {
-    let graph = genome_to_graph(genome);
-    let petgraph = graph.to_petgraph();
-    let petgraph = petgraph.map(|_ni, n| {
-                                    CppnNode {
-                                        value: None,
-                                        node_type: n.clone(),
-                                    }
-                                },
-                                |_ei, e| e.get() as f64);
+    let mut node_map = BTreeMap::new();
+    let mut g = CppnGraph::new();
 
-    // make sure that the graph does not contain a cycle.
-    assert!(!petgraph::algo::is_cyclic_directed(&petgraph));
-
-    let mut inputs = BTreeMap::new();
-    let mut outputs = BTreeMap::new();
-
-    for idx in petgraph.node_indices() {
-        match petgraph.node_weight(idx).unwrap() {
-            &CppnNode{node_type: NodeType::Input(n), ..} => {
-                let old = inputs.insert(n, idx);
-                assert!(old.is_none());
+    for (&innov, node) in genome.node_genes.map.iter() {
+        // make sure the node exists, even if there are no connection to it.
+        let node_idx = match node.node_type {
+            NodeType::Input(_) => g.add_node(CppnNodeType::Input, make_activation_function(0)),
+            NodeType::Output(_) => g.add_node(CppnNodeType::Output, make_activation_function(0)),
+            NodeType::Hidden{activation_function} => {
+                g.add_node(CppnNodeType::Hidden,
+                           make_activation_function(activation_function))
             }
-            &CppnNode{node_type: NodeType::Output(n), ..} => {
-                let old = outputs.insert(n, idx);
-                assert!(old.is_none());
-            }
-            &CppnNode{node_type: NodeType::Hidden{..}, ..} => {}
+        };
+
+        node_map.insert(innov.get(), node_idx);
+    }
+
+    for link in genome.link_genes.map.values() {
+        if link.active {
+            g.add_link(node_map[&link.source_node_gene.get()],
+                       node_map[&link.target_node_gene.get()],
+                       link.weight);
         }
     }
 
-    Cppn {
-        graph: CppnGraph { graph: petgraph },
-        inputs: inputs,
-        outputs: outputs,
-    }
+    Cppn::new(g)
 }
 
 #[derive(Debug)]
