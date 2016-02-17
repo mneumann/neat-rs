@@ -7,7 +7,7 @@ repository = "https://github.com/mneumann/neat-rs"
 description = "NEAT - NeuroEvolution of Augmented Topologies"
 keywords = ["evolution", "neuro", "net", "algorithm"]
 
-include = ["src/*.rs", "examples/*.rs", "examples/*.gml", "Cargo.toml", "LICENSE", "README.md"]
+include = ["src/*.rs", "src/genomes/*.rs", "examples/*.rs", "examples/*.gml", "Cargo.toml", "LICENSE", "README.md"]
 
 [dependencies]
 

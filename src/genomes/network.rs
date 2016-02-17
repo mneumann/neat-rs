@@ -1,12 +1,12 @@
-use super::innovation::{Innovation, InnovationContainer};
-use super::traits::{Distance, Genotype, Gene};
+use ::innovation::{Innovation, InnovationContainer};
+use ::traits::{Distance, Genotype, Gene};
 use std::cmp;
-use super::crossover::Crossover;
+use ::crossover::Crossover;
 use rand::Rng;
 use std::collections::BTreeMap;
-use super::adj_matrix::AdjMatrix;
+use ::adj_matrix::AdjMatrix;
 use std::marker::PhantomData;
-use super::mutate::MutateMethod;
+use ::mutate::MutateMethod;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NodeType {

@@ -14,6 +14,7 @@ pub mod crossover;
 pub mod mutate;
 pub mod fitness;
 pub mod population;
-pub mod network;
 pub mod prob;
 mod adj_matrix;
+
+pub mod genomes;
