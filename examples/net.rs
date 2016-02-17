@@ -28,8 +28,8 @@ use cppn::cppn::{Cppn, CppnGraph, CppnNodeType};
 
 fn node_type_from_str(s: &str) -> NodeType {
     match s {
-        "input" => NodeType::Input(0), // XXX
-        "output" => NodeType::Output(0), // XXX
+        "input" => NodeType::Input,
+        "output" => NodeType::Output,
         "hidden" => NodeType::Hidden { activation_function: 0 }, // XXX
         _ => panic!("Invalid node type/weight"),
     }
@@ -195,8 +195,8 @@ fn genome_to_cppn(genome: &NetworkGenome) -> Cppn {
     for (&innov, node) in genome.node_genes.map.iter() {
         // make sure the node exists, even if there are no connection to it.
         let node_idx = match node.node_type {
-            NodeType::Input(_) => g.add_node(CppnNodeType::Input, make_activation_function(0)),
-            NodeType::Output(_) => g.add_node(CppnNodeType::Output, make_activation_function(0)),
+            NodeType::Input => g.add_node(CppnNodeType::Input, make_activation_function(0)),
+            NodeType::Output => g.add_node(CppnNodeType::Output, make_activation_function(0)),
             NodeType::Hidden{activation_function} => {
                 g.add_node(CppnNodeType::Hidden,
                            make_activation_function(activation_function))
@@ -228,8 +228,8 @@ impl NodeColorMatching<NodeType> for NodeColors {
 
         // Treat nodes as equal regardless of their activation function or input/output number.
         let eq = match (node_i_value, node_j_value) {
-            (&NodeType::Input(..), &NodeType::Input(..)) => true,
-            (&NodeType::Output(..), &NodeType::Output(..)) => true,
+            (&NodeType::Input, &NodeType::Input) => true,
+            (&NodeType::Output, &NodeType::Output) => true,
             (&NodeType::Hidden{..}, &NodeType::Hidden{..}) => true,
             _ => false,
         };
