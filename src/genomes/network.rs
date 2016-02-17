@@ -1,12 +1,12 @@
-use ::innovation::{Innovation, InnovationContainer};
-use ::traits::{Distance, Genotype, Gene};
+use innovation::{Innovation, InnovationContainer};
+use traits::{Distance, Genotype, Gene};
 use std::cmp;
-use ::crossover::Crossover;
+use crossover::Crossover;
 use rand::Rng;
 use std::collections::BTreeMap;
-use ::adj_matrix::AdjMatrix;
+use adj_matrix::AdjMatrix;
 use std::marker::PhantomData;
-use ::mutate::MutateMethod;
+use mutate::MutateMethod;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NodeType {
@@ -133,14 +133,12 @@ impl NetworkGenome {
         // additionally, we want to make sure, that there are only outgoing links from input nodes
         // (no incoming links), and only incoming links to output nodes.
         unconnected.retain(|&(source, target)| {
-            if let Some(&NodeGene{node_type: NodeType::Output, ..}) =
-                   self.node_genes
-                       .get(&rev_map[source]) {
+            if let Some(&NodeGene{node_type: NodeType::Output, ..}) = self.node_genes
+                                                                          .get(&rev_map[source]) {
                 // reject if source is an output node
                 false
-            } else if let Some(&NodeGene{node_type: NodeType::Input, ..}) =
-                   self.node_genes
-                       .get(&rev_map[target]) {
+            } else if let Some(&NodeGene{node_type: NodeType::Input, ..}) = self.node_genes
+                                                                         .get(&rev_map[target]) {
                 // reject if target is an input node
                 false
             } else {

@@ -12,28 +12,16 @@ use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
 use neat::prob::is_probable;
-use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching, Graph};
+use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
 use std::fmt::Debug;
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
-use petgraph::Graph as PetGraph;
-use petgraph::{Directed, EdgeDirection};
-use petgraph::graph::NodeIndex;
 use std::collections::BTreeMap;
 use cppn::bipolar::{Linear, Gaussian, Sigmoid, Sine};
 use cppn::{Identity, ActivationFunction};
 use cppn::cppn::{Cppn, CppnGraph, CppnNodeType};
-
-fn node_type_from_str(s: &str) -> NodeType {
-    match s {
-        "input" => NodeType::Input,
-        "output" => NodeType::Output,
-        "hidden" => NodeType::Hidden { activation_function: 0 }, // XXX
-        _ => panic!("Invalid node type/weight"),
-    }
-}
 
 fn neuron_type_from_str(s: &str) -> NeuronType {
     match s {
@@ -66,25 +54,6 @@ fn load_graph<NT, F>(graph_file: &str, node_weight_fn: &F) -> OwnedGraph<NT>
                                &|_| -> Option<()> { Some(()) })
                     .unwrap();
     OwnedGraph::from_petgraph(&graph)
-}
-
-fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
-    let mut builder = GraphBuilder::new();
-
-    for (&innov, node) in genome.node_genes.map.iter() {
-        // make sure the node exists, even if there are no connection to it.
-        let _ = builder.add_node(innov.get(), node.node_type);
-    }
-
-    for link in genome.link_genes.map.values() {
-        if link.active {
-            builder.add_edge(link.source_node_gene.get(),
-                             link.target_node_gene.get(),
-                             closed01::Closed01::new(link.weight as f32));
-        }
-    }
-
-    return builder.graph();
 }
 
 fn make_activation_function(f: u32) -> Box<ActivationFunction> {
@@ -220,28 +189,6 @@ fn genome_to_cppn(genome: &NetworkGenome) -> Cppn {
 #[derive(Debug)]
 struct NodeColors;
 
-impl NodeColorMatching<NodeType> for NodeColors {
-    fn node_color_matching(&self,
-                           node_i_value: &NodeType,
-                           node_j_value: &NodeType)
-                           -> closed01::Closed01<f32> {
-
-        // Treat nodes as equal regardless of their activation function or input/output number.
-        let eq = match (node_i_value, node_j_value) {
-            (&NodeType::Input, &NodeType::Input) => true,
-            (&NodeType::Output, &NodeType::Output) => true,
-            (&NodeType::Hidden{..}, &NodeType::Hidden{..}) => true,
-            _ => false,
-        };
-
-        if eq {
-            closed01::Closed01::one()
-        } else {
-            closed01::Closed01::zero()
-        }
-    }
-}
-
 impl NodeColorMatching<NeuronType> for NodeColors {
     fn node_color_matching(&self,
                            node_i_value: &NeuronType,
@@ -254,22 +201,6 @@ impl NodeColorMatching<NeuronType> for NodeColors {
         }
     }
 }
-
-#[derive(Debug)]
-struct FitnessEvaluator {
-    target_graph: OwnedGraph<NodeType>,
-}
-
-impl FitnessEvaluator {
-    // A larger fitness means "better"
-    fn fitness(&self, genome: &NetworkGenome) -> f32 {
-        let graph = genome_to_graph(genome);
-        let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
-        s.iterate(50, 0.01);
-        s.score_optimal_sum_norm(None, ScoreNorm::MaxDegree).get()
-    }
-}
-
 
 #[derive(Debug)]
 struct FitnessEvaluatorCppn {
@@ -326,8 +257,6 @@ impl ElementStrategy for ES {
 }
 
 const POP_SIZE: usize = 100;
-const INPUTS: usize = 2;
-const OUTPUTS: usize = 3;
 
 struct Mater<'a, T: ElementStrategy + 'a> {
     // probability for crossover. P_mutate = 1.0 - p_crossover
@@ -361,11 +290,6 @@ impl<'a, T: ElementStrategy> Mate<NetworkGenome> for Mater<'a, T> {
 
 fn main() {
     let mut rng = rand::thread_rng();
-
-    // let fitness_evaluator = FitnessEvaluator {
-    // target_graph: load_graph("examples/jeffress.gml", &node_type_from_str),
-    // };
-    //
 
     let fitness_evaluator = FitnessEvaluatorCppn {
         target_graph: load_graph("examples/jeffress.gml", &neuron_type_from_str),
