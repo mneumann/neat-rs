@@ -74,7 +74,7 @@ fn load_graph<NT, F>(graph_file: &str, node_weight_fn: &F) -> OwnedGraph<NT>
     OwnedGraph::from_petgraph(&graph)
 }
 
-fn genome_to_graph(genome: &Genome<Node, u32>) -> OwnedGraph<Node> {
+fn genome_to_graph(genome: &Genome<Node>) -> OwnedGraph<Node> {
     let mut builder = GraphBuilder::new();
 
     genome.visit_node_genes(|node_gene| {
@@ -124,7 +124,7 @@ struct FitnessEvaluator {
 
 impl FitnessEvaluator {
     // A larger fitness means "better"
-    fn fitness(&self, genome: &Genome<Node, u32>) -> f32 {
+    fn fitness(&self, genome: &Genome<Node>) -> f32 {
         let graph = genome_to_graph(genome);
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
@@ -134,19 +134,12 @@ impl FitnessEvaluator {
 
 struct ES;
 
-impl ElementStrategy<Node, u32> for ES {
+impl ElementStrategy<Node> for ES {
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
         // XXX Choose a weight between -1 and 1?
         rng.gen()
     }
-    // XXX: replace all by just one call to random_node()
-    fn random_activation_function<R: Rng>(rng: &mut R) -> u32 {
-        rng.gen_range(0, 5)
-    }
-    fn null_activation_function() -> u32 {
-        0
-    }
-    fn default_node_type() -> Node {
+    fn random_node_type<R: Rng>(_rng: &mut R) -> Node {
         Node::Hidden
     }
 }
@@ -155,31 +148,29 @@ const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
-struct Mater<'a, NT, ND, S>
+struct Mater<'a, NT, S>
 where NT: NodeType + 'a,
-      ND: Clone + Debug + Send + 'a,
-      S: ElementStrategy<NT, ND> + 'a,
+      S: ElementStrategy<NT> + 'a,
 {
     // probability for crossover. P_mutate = 1.0 - p_crossover
     p_crossover: Closed01<f32>,
     p_crossover_detail: ProbabilisticCrossover,
     mutate_weights: MutateMethodWeighting,
-    env: &'a mut Environment<NT, ND, S>,
+    env: &'a mut Environment<NT, S>,
 }
 
-impl<'a, NT, ND, S> Mate<Genome<NT, ND>> for Mater<'a, NT, ND, S> 
+impl<'a, NT, S> Mate<Genome<NT>> for Mater<'a, NT, S> 
 where NT: NodeType + 'a,
-      ND: Clone + Debug + Send + 'a,
-      S: ElementStrategy<NT, ND> + 'a,
+      S: ElementStrategy<NT> + 'a,
 {
     // Add an argument that descibes whether both genomes are of equal fitness.
     // Pass individual, which includes the fitness.
     fn mate<R: Rng>(&mut self,
-                    parent_left: &Genome<NT, ND>,
-                    parent_right: &Genome<NT, ND>,
+                    parent_left: &Genome<NT>,
+                    parent_right: &Genome<NT>,
                     prefer_mutate: bool,
                     rng: &mut R)
-                    -> Genome<NT, ND> {
+                    -> Genome<NT> {
         if prefer_mutate == false && is_probable(&self.p_crossover, rng) {
             Genome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
         } else {
@@ -203,7 +194,7 @@ fn main() {
     println!("{:?}", fitness_evaluator);
 
     // start with minimal random topology.
-    let mut env: Environment<Node, u32, ES> = Environment::new();
+    let mut env: Environment<Node, ES> = Environment::new();
 
     // Generates a template Genome with `n_inputs` input nodes and `n_outputs` output nodes.
     // The genome will not have any link nodes.
@@ -213,10 +204,10 @@ fn main() {
         assert!(INPUTS > 0 && OUTPUTS > 0);
 
            for _ in 0..INPUTS {
-               env.add_node_to_genome(&mut genome, Node::Input, 0);
+               env.add_node_to_genome(&mut genome, Node::Input);
            }
            for _ in 0..OUTPUTS {
-               env.add_node_to_genome(&mut genome, Node::Output, 0);
+               env.add_node_to_genome(&mut genome, Node::Output);
            }
            genome
    };

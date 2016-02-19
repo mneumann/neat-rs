@@ -13,13 +13,12 @@ use mutate::MutateMethod;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
-pub struct NodeGene<NT: NodeType, ND: Debug + Clone> {
+pub struct NodeGene<NT: NodeType> {
     pub innovation: Innovation,
     pub node_type: NT,
-    pub node_data: ND,
 }
 
-impl<NT: NodeType, ND: Debug + Clone + Send> Gene for NodeGene<NT, ND> {
+impl<NT: NodeType> Gene for NodeGene<NT> {
     fn weight_distance(&self, _other: &Self) -> f64 {
         0.0
     }
@@ -63,15 +62,15 @@ impl LinkGene {
 }
 
 #[derive(Clone, Debug)]
-pub struct Genome<NT: NodeType, ND: Debug + Clone + Send> {
+pub struct Genome<NT: NodeType> {
     link_genes: GeneList<LinkGene>,
-    node_genes: GeneList<NodeGene<NT, ND>>,
-    network: NetworkMap<Innovation, NT, ND, f64>,
+    node_genes: GeneList<NodeGene<NT>>,
+    network: NetworkMap<Innovation, NT, f64>,
 }
 
-impl<NT: NodeType, ND: Debug + Clone + Send> Genotype for Genome<NT, ND> {}
+impl<NT: NodeType> Genotype for Genome<NT> {}
 
-impl<NT: NodeType, ND: Debug + Clone + Send> Genome<NT, ND> {
+impl<NT: NodeType> Genome<NT> {
     pub fn new() -> Self {
         Genome {
             link_genes: GeneList::new(),
@@ -81,7 +80,7 @@ impl<NT: NodeType, ND: Debug + Clone + Send> Genome<NT, ND> {
     }
 
     pub fn visit_node_genes<F>(&self, mut f: F)
-        where F: FnMut(&NodeGene<NT, ND>)
+        where F: FnMut(&NodeGene<NT>)
     {
         for node_gene_w in self.node_genes.genes().iter() {
             f(node_gene_w.as_ref())
@@ -106,10 +105,8 @@ impl<NT: NodeType, ND: Debug + Clone + Send> Genome<NT, ND> {
         self.link_genes.insert(link_gene);
     }
 
-    pub fn add_node(&mut self, node_gene: NodeGene<NT, ND>) {
-        self.network.add_node(node_gene.innovation(),
-                              node_gene.node_type.clone(),
-                              node_gene.node_data.clone());
+    pub fn add_node(&mut self, node_gene: NodeGene<NT>) {
+        self.network.add_node(node_gene.innovation(), node_gene.node_type.clone());
         self.node_genes.push(node_gene);
     }
 
@@ -152,9 +149,7 @@ impl<NT: NodeType, ND: Debug + Clone + Send> Genome<NT, ND> {
         // At first, add all nodes to the graph
         for node_gene in new_node_genes.genes().iter() {
             let node = node_gene.as_ref();
-            net.add_node(node.innovation(),
-                         node.node_type.clone(),
-                         node.node_data.clone());
+            net.add_node(node.innovation(), node.node_type.clone());
         }
 
         // now only retain those link genes, which would not introduce a cycle
@@ -199,8 +194,8 @@ pub struct GenomeDistance {
     pub weight: f64,
 }
 
-impl<NT: NodeType, ND: Debug + Clone + Send> Distance<Genome<NT, ND>> for GenomeDistance {
-    fn distance(&self, genome_left: &Genome<NT, ND>, genome_right: &Genome<NT, ND>) -> f64 {
+impl<NT: NodeType> Distance<Genome<NT>> for GenomeDistance {
+    fn distance(&self, genome_left: &Genome<NT>, genome_right: &Genome<NT>) -> f64 {
         let genes_left = &genome_left.link_genes;
         let genes_right = &genome_right.link_genes;
 
@@ -222,21 +217,16 @@ impl<NT: NodeType, ND: Debug + Clone + Send> Distance<Genome<NT, ND>> for Genome
     }
 }
 /// This trait is used to specialize link weight creation and node activation function creation.
-pub trait ElementStrategy<NT, ND>
-where NT: NodeType,
-      ND: Clone + Debug + Send,
+pub trait ElementStrategy<NT: NodeType>
 {
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64;
-    fn random_activation_function<R: Rng>(rng: &mut R) -> ND;
-    fn null_activation_function() -> ND;
-    fn default_node_type() -> NT;
+    fn random_node_type<R: Rng>(rng: &mut R) -> NT;
 }
 
 #[derive(Debug)]
-pub struct Environment<NT, ND, S>
+pub struct Environment<NT, S>
     where NT: NodeType,
-          ND: Debug + Clone + Send,
-          S: ElementStrategy<NT, ND>
+          S: ElementStrategy<NT>
 {
     node_innovation_counter: Innovation,
     link_innovation_counter: Innovation,
@@ -244,13 +234,11 @@ pub struct Environment<NT, ND, S>
     link_innovation_cache: BTreeMap<(Innovation, Innovation), Innovation>,
     _marker_s: PhantomData<S>,
     _marker_nt: PhantomData<NT>,
-    _marker_nd: PhantomData<ND>,
 }
 
-impl<NT, ND, S> Environment<NT, ND, S>
+impl<NT, S> Environment<NT, S>
     where NT: NodeType,
-          ND: Debug + Clone + Send,
-          S: ElementStrategy<NT, ND>
+          S: ElementStrategy<NT>
 {
     pub fn new() -> Self {
         Environment {
@@ -259,14 +247,13 @@ impl<NT, ND, S> Environment<NT, ND, S>
             link_innovation_cache: BTreeMap::new(),
             _marker_s: PhantomData,
             _marker_nt: PhantomData,
-            _marker_nd: PhantomData,
         }
     }
 
     /// Adds a link to `genome` without checking if the addition of this
     /// link would introduce a cycle or would otherwise be illegal.
     fn add_link(&mut self,
-                genome: &mut Genome<NT, ND>,
+                genome: &mut Genome<NT>,
                 source_node: Innovation,
                 target_node: Innovation,
                 weight: f64) {
@@ -299,10 +286,10 @@ impl<NT, ND, S> Environment<NT, ND, S>
     }
 
     pub fn mutate<R: Rng>(&mut self,
-                          genome: &Genome<NT, ND>,
+                          genome: &Genome<NT>,
                           method: MutateMethod,
                           rng: &mut R)
-                          -> Option<Genome<NT, ND>> {
+                          -> Option<Genome<NT>> {
         match method {
             MutateMethod::ModifyWeight => {
                 // XXX
@@ -314,9 +301,9 @@ impl<NT, ND, S> Environment<NT, ND, S>
     }
 
     pub fn mutate_add_connection<R: Rng>(&mut self,
-                                         genome: &Genome<NT, ND>,
+                                         genome: &Genome<NT>,
                                          rng: &mut R)
-                                         -> Option<Genome<NT, ND>> {
+                                         -> Option<Genome<NT>> {
         genome.network.find_random_unconnected_link_no_cycle(rng).map(|(&src, &target)| {
             let mut offspring = genome.clone();
             // Add new link to the offspring genome
@@ -325,23 +312,19 @@ impl<NT, ND, S> Environment<NT, ND, S>
         })
     }
 
-    pub fn add_node_to_genome(&mut self,
-                              genome: &mut Genome<NT, ND>,
-                              node_type: NT,
-                              node_data: ND) {
+    pub fn add_node_to_genome(&mut self, genome: &mut Genome<NT>, node_type: NT) {
         genome.add_node(NodeGene {
             innovation: self.node_innovation_counter.next().unwrap(),
             node_type: node_type,
-            node_data: node_data,
         });
     }
 
     /// choose a random link. split it in half.
     /// XXX: activate if link is inactive?
     pub fn mutate_add_node<R: Rng>(&mut self,
-                                   genome: &Genome<NT, ND>,
+                                   genome: &Genome<NT>,
                                    rng: &mut R)
-                                   -> Option<Genome<NT, ND>> {
+                                   -> Option<Genome<NT>> {
         genome.find_random_active_link_gene(rng).map(|link_innov| {
             // split link in half.
             let mut offspring = genome.clone();
@@ -349,8 +332,7 @@ impl<NT, ND, S> Environment<NT, ND, S>
             // add new node
             offspring.add_node(NodeGene {
                 innovation: new_node_innovation,
-                node_type: S::default_node_type(), // XXX: new node type
-                node_data: S::random_activation_function(rng),
+                node_type: S::random_node_type(rng),
             });
 
             // disable `link_innov` in offspring

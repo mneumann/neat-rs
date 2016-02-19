@@ -17,7 +17,7 @@ dependencies = [
 [[package]]
 name = "acyclic-network"
 version = "0.0.1"
-source = "git+https://github.com/mneumann/acyclic-network-rs#a0122d67a6143b4c6e3729c4eadba93c930a9676"
+source = "git+https://github.com/mneumann/acyclic-network-rs#8229c228412e42036e057970b846e194c719f532"
 dependencies = [
  "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
