@@ -2,8 +2,8 @@
 name = "neat"
 version = "0.0.1"
 dependencies = [
+ "acyclic-network 0.0.1 (git+https://github.com/mneumann/acyclic-network-rs)",
  "closed01 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "cppn 0.0.1 (git+https://github.com/mneumann/cppn-rs)",
  "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "graph-io-gml 0.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "graph-neighbor-matching 0.5.0 (git+https://github.com/mneumann/graph-neighbor-matching)",
@@ -11,6 +11,16 @@ dependencies = [
  "petgraph 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon 0.2.0 (git+https://github.com/nikomatsakis/rayon)",
+ "sorted-vec 0.0.1 (git+https://github.com/mneumann/sorted-vec-rs)",
+]
+
+[[package]]
+name = "acyclic-network"
+version = "0.0.1"
+source = "git+https://github.com/mneumann/acyclic-network-rs#7f9326e5674c3a30adb90b85c05c77dbf5241a24"
+dependencies = [
+ "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -23,15 +33,6 @@ name = "closed01"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "cppn"
-version = "0.0.1"
-source = "git+https://github.com/mneumann/cppn-rs#82ad2931e5af63d0fc38bad0826669cc7cfac8c5"
-dependencies = [
- "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -146,7 +147,7 @@ dependencies = [
 [[package]]
 name = "rayon"
 version = "0.2.0"
-source = "git+https://github.com/nikomatsakis/rayon#0db5de8daccddb1090a0a610fa4734e3b39f2490"
+source = "git+https://github.com/nikomatsakis/rayon#f8d7fe1401f6ee9fea92760061360aa9906c6463"
 dependencies = [
  "deque 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -157,6 +158,11 @@ dependencies = [
 name = "rustc-serialize"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "sorted-vec"
+version = "0.0.1"
+source = "git+https://github.com/mneumann/sorted-vec-rs#8730a05151762d3f78b8ff81eed1f27514febd7f"
 
 [[package]]
 name = "winapi"

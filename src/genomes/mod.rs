@@ -1,1 +1,1 @@
-pub mod network;
+pub mod acyclic_network;

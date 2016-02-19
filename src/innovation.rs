@@ -1,33 +1,6 @@
-use std::collections::BTreeMap;
-use super::alignment::{Alignment, AlignmentMetric};
-use super::traits::Gene;
-
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+/// New type representing an innovation number.
 pub struct Innovation(usize);
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum InnovationRange {
-    FromTo(Innovation, Innovation), // inclusive end
-    Empty,
-}
-
-#[derive(Debug, Clone)]
-pub struct InnovationContainer<T: Gene> {
-    pub map: BTreeMap<Innovation, T>,
-}
-
-impl Iterator for Innovation {
-    type Item = Innovation;
-    fn next(&mut self) -> Option<Innovation> {
-        match self.0.checked_add(1) {
-            Some(n) => {
-                self.0 = n;
-                Some(Innovation(n))
-            }
-            None => None,
-        }
-    }
-}
 
 impl Innovation {
     pub fn new(n: usize) -> Innovation {
@@ -39,201 +12,20 @@ impl Innovation {
     }
 }
 
-impl InnovationRange {
-    pub fn contains(&self, innov: &Innovation) -> bool {
-        match *self {
-            InnovationRange::FromTo(ref a, ref b) => innov >= a && innov <= b,
-            InnovationRange::Empty => false,
-        }
-    }
-
-    // NOTE: This requires that the iteration is in sorted order.
-    fn from_sorted_iter<I>(mut iter: I) -> InnovationRange
-        where I: Iterator<Item = Innovation> + DoubleEndedIterator<Item = Innovation>
-    {
-        iter.next()
-            .map(|min| {
-                match iter.next_back() {
-                    Some(max) => InnovationRange::FromTo(min, max),
-                    None => InnovationRange::FromTo(min, min),
-                }
-            })
-            .unwrap_or(InnovationRange::Empty)
-    }
-}
-
-impl<T: Gene> InnovationContainer<T> {
-    pub fn new() -> InnovationContainer<T> {
-        InnovationContainer { map: BTreeMap::new() }
-    }
-
-    pub fn insert(&mut self, innov: Innovation, data: T) {
-        assert!(!self.map.contains_key(&innov));
-        self.map.insert(innov, data);
-    }
-
-    pub fn insert_or_replace(&mut self, innov: Innovation, data: T) {
-        self.map.insert(innov, data);
-    }
-
-    pub fn contains_key(&self, innov: &Innovation) -> bool {
-        self.map.contains_key(innov)
-    }
-
-    // Insert `innov` from either `left` or from `right`, unless it already exists in `self`.
-    // Panics if both `left` and `right` do not include `innov`.
-    pub fn insert_from_either_or(&mut self, innov: Innovation, left: &Self, right: &Self) {
-        // XXX: Use entry()
-        if !self.contains_key(&innov) {
-            let gene = left.get(&innov).or_else(|| right.get(&innov)).unwrap();
-            self.insert(innov, gene.clone());
-        }
-    }
-
-    pub fn get(&self, innov: &Innovation) -> Option<&T> {
-        self.map.get(innov)
-    }
-
-    pub fn get_mut(&mut self, innov: &Innovation) -> Option<&mut T> {
-        self.map.get_mut(innov)
-    }
-
-    pub fn len(&self) -> usize {
-        self.map.len()
-    }
-
-    // Returns the min and max innovation numbers (inclusive)
-    pub fn innovation_range(&self) -> InnovationRange {
-        InnovationRange::from_sorted_iter(self.map.keys().cloned())
-    }
-
-    #[cfg(test)]
-    fn align_as_container<'a>(&'a self,
-                              right: &'a InnovationContainer<T>)
-                              -> BTreeMap<Innovation, Alignment<'a, T>> {
-        let mut c = BTreeMap::new();
-        self.align(right,
-                   &mut |innov, alignment| {
-                       c.insert(innov, alignment);
-                   });
-        c
-    }
-
-    pub fn align<'a, F>(&'a self, right: &'a InnovationContainer<T>, f: &mut F)
-        where F: FnMut(Innovation, Alignment<'a, T>)
-    {
-        let range_left = self.innovation_range();
-        let range_right = right.innovation_range();
-
-        for (innov_left, gene_left) in self.map.iter() {
-            if range_right.contains(innov_left) {
-                match right.get(innov_left) {
-                    Some(gene_right) => f(*innov_left, Alignment::Match(gene_left, gene_right)),
-                    None => f(*innov_left, Alignment::DisjointLeft(gene_left)),
-                }
-            } else {
-                f(*innov_left, Alignment::ExcessLeft(gene_left))
+impl Innovation {
+    pub fn next(&mut self) -> Option<Innovation> {
+        match self.0.checked_add(1) {
+            Some(n) => {
+                self.0 = n;
+                Some(Innovation(n))
             }
-        }
-
-        for (innov_right, gene_right) in right.map.iter() {
-            if range_left.contains(innov_right) {
-                if !self.map.contains_key(innov_right) {
-                    f(*innov_right, Alignment::DisjointRight(gene_right))
-                }
-            } else {
-                f(*innov_right, Alignment::ExcessRight(gene_right))
-            }
+            None => None,
         }
     }
-
-    pub fn alignment_metric(&self, right: &InnovationContainer<T>) -> AlignmentMetric {
-        let mut m = AlignmentMetric::new();
-        self.align(right,
-                   &mut |_, alignment| {
-                       match alignment {
-                           Alignment::Match(gene_left, gene_right) => {
-                               m.matching += 1;
-                               m.weight_distance += gene_left.weight_distance(gene_right).abs();
-                           }
-                           Alignment::DisjointLeft(_) | Alignment::DisjointRight(_) => {
-                               m.disjoint += 1;
-                           }
-                           Alignment::ExcessLeft(_) | Alignment::ExcessRight(_) => {
-                               m.excess += 1;
-                           }
-                       }
-                   });
-
-        assert!(2 * m.matching + m.disjoint + m.excess == self.len() + right.len());
-        return m;
-    }
-}
-
-#[cfg(test)]
-impl Gene for () {}
-
-#[test]
-fn test_innovation() {
-    let r = InnovationRange::FromTo(Innovation(0), Innovation(100));
-    assert_eq!(true, r.contains(&Innovation(0)));
-    assert_eq!(true, r.contains(&Innovation(50)));
-    assert_eq!(true, r.contains(&Innovation(100)));
-    assert_eq!(false, r.contains(&Innovation(101)));
-    let r = InnovationRange::FromTo(Innovation(1), Innovation(100));
-    assert_eq!(false, r.contains(&Innovation(0)));
-    assert_eq!(true, r.contains(&Innovation(1)));
-    assert_eq!(true, r.contains(&Innovation(50)));
-    assert_eq!(true, r.contains(&Innovation(100)));
-    assert_eq!(false, r.contains(&Innovation(101)));
 }
 
 #[test]
-fn test_innovation_range() {
-    let mut genome = InnovationContainer::new();
-    genome.insert(Innovation(50), ());
-    assert_eq!(InnovationRange::FromTo(Innovation(50), Innovation(50)),
-               genome.innovation_range());
-    genome.insert(Innovation(20), ());
-    assert_eq!(InnovationRange::FromTo(Innovation(20), Innovation(50)),
-               genome.innovation_range());
-    genome.insert(Innovation(100), ());
-    assert_eq!(InnovationRange::FromTo(Innovation(20), Innovation(100)),
-               genome.innovation_range());
-    genome.insert(Innovation(0), ());
-    assert_eq!(InnovationRange::FromTo(Innovation(0), Innovation(100)),
-               genome.innovation_range());
-}
-
-#[test]
-fn test_innovation_alignment() {
-    let mut left = InnovationContainer::new();
-    let mut right = InnovationContainer::new();
-    left.insert(Innovation(50), ());
-    left.insert(Innovation(46), ());
-    left.insert(Innovation(40), ());
-    right.insert(Innovation(50), ());
-    right.insert(Innovation(45), ());
-    right.insert(Innovation(51), ());
-    right.insert(Innovation(52), ());
-
-    let c = left.align_as_container(&right);
-    assert_eq!(6, c.len());
-    assert_eq!(true, c.get(&Innovation(50)).unwrap().is_match());
-    assert_eq!(true, c.get(&Innovation(40)).unwrap().is_excess_left());
-    assert_eq!(true, c.get(&Innovation(40)).unwrap().is_excess());
-    assert_eq!(true, c.get(&Innovation(45)).unwrap().is_disjoint_right());
-    assert_eq!(true, c.get(&Innovation(45)).unwrap().is_disjoint());
-    assert_eq!(true, c.get(&Innovation(46)).unwrap().is_disjoint_left());
-    assert_eq!(true, c.get(&Innovation(46)).unwrap().is_disjoint());
-    assert_eq!(true, c.get(&Innovation(51)).unwrap().is_excess_right());
-    assert_eq!(true, c.get(&Innovation(51)).unwrap().is_excess());
-    assert_eq!(true, c.get(&Innovation(52)).unwrap().is_excess_right());
-    assert_eq!(true, c.get(&Innovation(52)).unwrap().is_excess());
-}
-
-#[test]
-fn test_innovation_iter() {
+fn test_innovation_next() {
     let mut innovations = Innovation(1);
     assert_eq!(Innovation(1), innovations);
     assert_eq!(Some(Innovation(2)), innovations.next());

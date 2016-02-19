@@ -11,7 +11,7 @@ use rayon::par_iter::*;
 use super::prob::probabilistic_round;
 
 #[derive(Debug)]
-pub struct Individual<T: Debug> {
+pub struct Individual<T: Debug + Genotype> {
     fitness: Fitness,
     genome: Box<T>,
 }

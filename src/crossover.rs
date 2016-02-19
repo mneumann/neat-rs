@@ -1,23 +1,19 @@
 use rand::{Rng, Closed01};
-use super::alignment::Alignment;
-use super::innovation::InnovationContainer;
-use super::prob::is_probable;
-use super::traits::Gene;
+use prob::is_probable;
+use gene::Gene;
+use gene_list::GeneList;
+use alignment::{Alignment, align};
 
-// XXX: Move to traits. Abstract InnovationContainer away.
 pub trait Crossover {
-    /// Performs a crossover between `parent_left` and `parent_right`
-    /// resulting in a single offspring. It can be assumed that
-    /// `parent_left` is the fitter parent.
-    fn crossover<T: Gene, R: Rng>(&self,
-                                  parent_left: &InnovationContainer<T>,
-                                  parent_right: &InnovationContainer<T>,
-                                  rng: &mut R)
-                                  -> InnovationContainer<T>;
+    fn crossover<T: Gene, R: Rng, F: FnMut(&T)>(&self,
+                                                parent_left: &GeneList<T>,
+                                                parent_right: &GeneList<T>,
+                                                construct: &mut F,
+                                                rng: &mut R);
 }
 
 /// A specific form of crossover where the probabilities below determine from
-/// parent a gene is taken.
+/// which parent a gene is taken.
 ///
 /// XXX: It's probably faster to not use floats here.
 pub struct ProbabilisticCrossover {
@@ -41,51 +37,52 @@ impl Crossover for ProbabilisticCrossover {
     /// `parent_left` is the fitter parent. Take gene
     /// either from `parent_left` or `parent_right` according to
     /// the specified probabilities and the relative fitness of the parents.
-    fn crossover<T: Gene, R: Rng>(&self,
-                                  parent_left: &InnovationContainer<T>,
-                                  parent_right: &InnovationContainer<T>,
-                                  rng: &mut R)
-                                  -> InnovationContainer<T> {
+    ///
+    /// The individual genes are passed to `construct`, which can further decide
+    /// if that gene is taken into the offspring or not.
+    fn crossover<T: Gene, R: Rng, F: FnMut(&T)>(&self,
+                                                parent_left: &GeneList<T>,
+                                                parent_right: &GeneList<T>,
+                                                construct: &mut F,
+                                                rng: &mut R) {
+        align(parent_left.genes(),
+              parent_right.genes(),
+              &mut |alignment| {
+                  match alignment {
+                      Alignment::Match(gene_left, gene_right) => {
+                          if is_probable(&self.prob_match_left, rng) {
+                              construct(gene_left.as_ref());
+                          } else {
+                              construct(gene_right.as_ref());
+                          }
+                      }
 
-        let mut offspring = InnovationContainer::new();
+                      Alignment::DisjointLeft(gene_left) => {
+                          if is_probable(&self.prob_disjoint_left, rng) {
+                              construct(gene_left.as_ref());
+                          }
+                      }
 
-        parent_left.align(parent_right,
-                          &mut |innov, alignment| {
-                              match alignment {
-                                  Alignment::Match(gene_left, gene_right) => {
-                                      if is_probable(&self.prob_match_left, rng) {
-                                          offspring.insert(innov, gene_left.clone());
-                                      } else {
-                                          offspring.insert(innov, gene_right.clone());
-                                      }
-                                  }
+                      Alignment::DisjointRight(gene_right) => {
+                          if is_probable(&self.prob_disjoint_right, rng) {
+                              construct(gene_right.as_ref());
+                          }
+                      }
 
-                                  Alignment::DisjointLeft(gene_left) => {
-                                      if is_probable(&self.prob_disjoint_left, rng) {
-                                          offspring.insert(innov, gene_left.clone());
-                                      }
-                                  }
+                      Alignment::ExcessLeftHead(gene_left) |
+                      Alignment::ExcessLeftTail(gene_left) => {
+                          if is_probable(&self.prob_excess_left, rng) {
+                              construct(gene_left.as_ref());
+                          }
+                      }
 
-                                  Alignment::DisjointRight(gene_right) => {
-                                      if is_probable(&self.prob_disjoint_right, rng) {
-                                          offspring.insert(innov, gene_right.clone());
-                                      }
-                                  }
-
-                                  Alignment::ExcessLeft(gene_left) => {
-                                      if is_probable(&self.prob_excess_left, rng) {
-                                          offspring.insert(innov, gene_left.clone());
-                                      }
-                                  }
-
-                                  Alignment::ExcessRight(gene_right) => {
-                                      if is_probable(&self.prob_excess_right, rng) {
-                                          offspring.insert(innov, gene_right.clone());
-                                      }
-                                  }
-                              }
-                          });
-
-        offspring
+                      Alignment::ExcessRightHead(gene_right) |
+                      Alignment::ExcessRightTail(gene_right) => {
+                          if is_probable(&self.prob_excess_right, rng) {
+                              construct(gene_right.as_ref());
+                          }
+                      }
+                  }
+              });
     }
 }

@@ -6,7 +6,7 @@ extern crate closed01;
 extern crate petgraph;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::network::{NetworkGenome, NetworkGenomeDistance, NodeType, Environment,
+use neat::genomes::acyclic_network::{Genome, GenomeDistance, NodeType, Environment,
                              ElementStrategy};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
@@ -18,12 +18,13 @@ use rand::{Rng, Closed01};
 use std::marker::PhantomData;
 use std::fmt::Debug;
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
+use neat::gene::Gene;
 
 fn node_type_from_str(s: &str) -> NodeType {
     match s {
         "input" => NodeType::Input,
         "output" => NodeType::Output,
-        "hidden" => NodeType::Hidden { activation_function: 0 }, // XXX
+        "hidden" => NodeType::Hidden,
         _ => panic!("Invalid node type/weight"),
     }
 }
@@ -52,21 +53,20 @@ fn load_graph<NT, F>(graph_file: &str, node_weight_fn: &F) -> OwnedGraph<NT>
     OwnedGraph::from_petgraph(&graph)
 }
 
-fn genome_to_graph(genome: &NetworkGenome) -> OwnedGraph<NodeType> {
+fn genome_to_graph(genome: &Genome) -> OwnedGraph<NodeType> {
     let mut builder = GraphBuilder::new();
 
-    for (&innov, node) in genome.node_genes.map.iter() {
+    genome.visit_node_genes(|node_gene| {
         // make sure the node exists, even if there are no connection to it.
-        let _ = builder.add_node(innov.get(), node.node_type);
-    }
+        let _ = builder.add_node(node_gene.innovation().get(), node_gene.node_type);
+    });
 
-    for link in genome.link_genes.map.values() {
-        if link.active {
-            builder.add_edge(link.source_node_gene.get(),
-                             link.target_node_gene.get(),
-                             closed01::Closed01::new(link.weight as f32));
-        }
-    }
+    genome.visit_active_link_genes(|link_gene| {
+            builder.add_edge(link_gene.source_node_gene.get(),
+                             link_gene.target_node_gene.get(),
+                             closed01::Closed01::new(link_gene.weight as f32));
+
+    });
 
     return builder.graph();
 }
@@ -84,7 +84,7 @@ impl NodeColorMatching<NodeType> for NodeColors {
         let eq = match (node_i_value, node_j_value) {
             (&NodeType::Input, &NodeType::Input) => true,
             (&NodeType::Output, &NodeType::Output) => true,
-            (&NodeType::Hidden{..}, &NodeType::Hidden{..}) => true,
+            (&NodeType::Hidden, &NodeType::Hidden) => true,
             _ => false,
         };
 
@@ -103,7 +103,7 @@ struct FitnessEvaluator {
 
 impl FitnessEvaluator {
     // A larger fitness means "better"
-    fn fitness(&self, genome: &NetworkGenome) -> f32 {
+    fn fitness(&self, genome: &Genome) -> f32 {
         let graph = genome_to_graph(genome);
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
@@ -121,6 +121,10 @@ impl ElementStrategy for ES {
     fn random_activation_function<R: Rng>(rng: &mut R) -> u32 {
         rng.gen_range(0, 5)
     }
+    fn null_activation_function() -> u32 {
+        0
+    }
+
 }
 
 const POP_SIZE: usize = 100;
@@ -135,17 +139,17 @@ struct Mater<'a, T: ElementStrategy + 'a> {
     env: &'a mut Environment<T>,
 }
 
-impl<'a, T: ElementStrategy> Mate<NetworkGenome> for Mater<'a, T> {
+impl<'a, T: ElementStrategy> Mate<Genome> for Mater<'a, T> {
     // Add an argument that descibes whether both genomes are of equal fitness.
     // Pass individual, which includes the fitness.
     fn mate<R: Rng>(&mut self,
-                    parent_left: &NetworkGenome,
-                    parent_right: &NetworkGenome,
+                    parent_left: &Genome,
+                    parent_right: &Genome,
                     prefer_mutate: bool,
                     rng: &mut R)
-                    -> NetworkGenome {
+                    -> Genome {
         if prefer_mutate == false && is_probable(&self.p_crossover, rng) {
-            NetworkGenome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
+            Genome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
         } else {
             // mutate
             let mutate_method = MutateMethod::random_with(&self.mutate_weights, rng);
@@ -202,7 +206,7 @@ fn main() {
         env: &mut env,
     };
 
-    let compatibility = NetworkGenomeDistance {
+    let compatibility = GenomeDistance {
         excess: 1.0,
         disjoint: 1.0,
         weight: 0.0,
