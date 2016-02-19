@@ -6,8 +6,7 @@ extern crate closed01;
 extern crate petgraph;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{Genome, GenomeDistance, NodeType, Environment,
-                             ElementStrategy};
+use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, Environment, ElementStrategy};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
@@ -20,11 +19,33 @@ use std::fmt::Debug;
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
 use neat::gene::Gene;
 
-fn node_type_from_str(s: &str) -> NodeType {
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Node {
+    Input,
+    Output,
+    Hidden,
+}
+
+impl NodeType for Node {
+    fn accept_incoming_links(&self) -> bool {
+        match *self {
+            Node::Input => false,
+            _ => true,
+        }
+    }
+    fn accept_outgoing_links(&self) -> bool {
+        match *self {
+            Node::Output => false,
+            _ => true,
+        }
+    }
+}
+
+fn node_from_str(s: &str) -> Node {
     match s {
-        "input" => NodeType::Input,
-        "output" => NodeType::Output,
-        "hidden" => NodeType::Hidden,
+        "input" => Node::Input,
+        "output" => Node::Output,
+        "hidden" => Node::Hidden,
         _ => panic!("Invalid node type/weight"),
     }
 }
@@ -53,7 +74,7 @@ fn load_graph<NT, F>(graph_file: &str, node_weight_fn: &F) -> OwnedGraph<NT>
     OwnedGraph::from_petgraph(&graph)
 }
 
-fn genome_to_graph(genome: &Genome) -> OwnedGraph<NodeType> {
+fn genome_to_graph(genome: &Genome<Node, u32>) -> OwnedGraph<Node> {
     let mut builder = GraphBuilder::new();
 
     genome.visit_node_genes(|node_gene| {
@@ -74,17 +95,17 @@ fn genome_to_graph(genome: &Genome) -> OwnedGraph<NodeType> {
 #[derive(Debug)]
 struct NodeColors;
 
-impl NodeColorMatching<NodeType> for NodeColors {
+impl NodeColorMatching<Node> for NodeColors {
     fn node_color_matching(&self,
-                           node_i_value: &NodeType,
-                           node_j_value: &NodeType)
+                           node_i_value: &Node,
+                           node_j_value: &Node)
                            -> closed01::Closed01<f32> {
 
         // Treat nodes as equal regardless of their activation function or input/output number.
         let eq = match (node_i_value, node_j_value) {
-            (&NodeType::Input, &NodeType::Input) => true,
-            (&NodeType::Output, &NodeType::Output) => true,
-            (&NodeType::Hidden, &NodeType::Hidden) => true,
+            (&Node::Input, &Node::Input) => true,
+            (&Node::Output, &Node::Output) => true,
+            (&Node::Hidden, &Node::Hidden) => true,
             _ => false,
         };
 
@@ -98,12 +119,12 @@ impl NodeColorMatching<NodeType> for NodeColors {
 
 #[derive(Debug)]
 struct FitnessEvaluator {
-    target_graph: OwnedGraph<NodeType>,
+    target_graph: OwnedGraph<Node>,
 }
 
 impl FitnessEvaluator {
     // A larger fitness means "better"
-    fn fitness(&self, genome: &Genome) -> f32 {
+    fn fitness(&self, genome: &Genome<Node, u32>) -> f32 {
         let graph = genome_to_graph(genome);
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
@@ -113,41 +134,52 @@ impl FitnessEvaluator {
 
 struct ES;
 
-impl ElementStrategy for ES {
+impl ElementStrategy<Node, u32> for ES {
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
         // XXX Choose a weight between -1 and 1?
         rng.gen()
     }
+    // XXX: replace all by just one call to random_node()
     fn random_activation_function<R: Rng>(rng: &mut R) -> u32 {
         rng.gen_range(0, 5)
     }
     fn null_activation_function() -> u32 {
         0
     }
-
+    fn default_node_type() -> Node {
+        Node::Hidden
+    }
 }
 
 const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
-struct Mater<'a, T: ElementStrategy + 'a> {
+struct Mater<'a, NT, ND, S>
+where NT: NodeType + 'a,
+      ND: Clone + Debug + Send + 'a,
+      S: ElementStrategy<NT, ND> + 'a,
+{
     // probability for crossover. P_mutate = 1.0 - p_crossover
     p_crossover: Closed01<f32>,
     p_crossover_detail: ProbabilisticCrossover,
     mutate_weights: MutateMethodWeighting,
-    env: &'a mut Environment<T>,
+    env: &'a mut Environment<NT, ND, S>,
 }
 
-impl<'a, T: ElementStrategy> Mate<Genome> for Mater<'a, T> {
+impl<'a, NT, ND, S> Mate<Genome<NT, ND>> for Mater<'a, NT, ND, S> 
+where NT: NodeType + 'a,
+      ND: Clone + Debug + Send + 'a,
+      S: ElementStrategy<NT, ND> + 'a,
+{
     // Add an argument that descibes whether both genomes are of equal fitness.
     // Pass individual, which includes the fitness.
     fn mate<R: Rng>(&mut self,
-                    parent_left: &Genome,
-                    parent_right: &Genome,
+                    parent_left: &Genome<NT, ND>,
+                    parent_right: &Genome<NT, ND>,
                     prefer_mutate: bool,
                     rng: &mut R)
-                    -> Genome {
+                    -> Genome<NT, ND> {
         if prefer_mutate == false && is_probable(&self.p_crossover, rng) {
             Genome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
         } else {
@@ -165,15 +197,29 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph("examples/jeffress.gml", &node_type_from_str),
+        target_graph: load_graph("examples/jeffress.gml", &node_from_str),
     };
 
     println!("{:?}", fitness_evaluator);
 
     // start with minimal random topology.
-    let mut env: Environment<ES> = Environment::new();
+    let mut env: Environment<Node, u32, ES> = Environment::new();
 
-    let template_genome = env.generate_genome(INPUTS, OUTPUTS);
+    // Generates a template Genome with `n_inputs` input nodes and `n_outputs` output nodes.
+    // The genome will not have any link nodes.
+
+    let template_genome = {
+        let mut genome = Genome::new();
+        assert!(INPUTS > 0 && OUTPUTS > 0);
+
+           for _ in 0..INPUTS {
+               env.add_node_to_genome(&mut genome, Node::Input, 0);
+           }
+           for _ in 0..OUTPUTS {
+               env.add_node_to_genome(&mut genome, Node::Output, 0);
+           }
+           genome
+   };
 
     println!("{:#?}", template_genome);
 

@@ -4,42 +4,22 @@ use gene_list::GeneList;
 use traits::{Distance, Genotype};
 use crossover::Crossover;
 use rand::Rng;
-use acyclic_network as ac;
+use acyclic_network::NetworkMap;
+pub use acyclic_network::NodeType;
 use std::collections::BTreeMap;
 use std::cmp;
 use std::marker::PhantomData;
 use mutate::MutateMethod;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum NodeType {
-    Input,
-    Output,
-    Hidden,
-}
-
-impl ac::NodeType for NodeType {
-    fn accept_incoming_links(&self) -> bool {
-        match *self {
-            NodeType::Input => false,
-            _ => true,
-        }
-    }
-    fn accept_outgoing_links(&self) -> bool {
-        match *self {
-            NodeType::Output => false,
-            _ => true,
-        }
-    }
-}
+use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
-pub struct NodeGene {
+pub struct NodeGene<NT: NodeType, ND: Debug + Clone> {
     pub innovation: Innovation,
-    pub node_type: NodeType,
-    pub activation_function: u32,
+    pub node_type: NT,
+    pub node_data: ND,
 }
 
-impl Gene for NodeGene {
+impl<NT: NodeType, ND: Debug + Clone + Send> Gene for NodeGene<NT, ND> {
     fn weight_distance(&self, _other: &Self) -> f64 {
         0.0
     }
@@ -83,25 +63,25 @@ impl LinkGene {
 }
 
 #[derive(Clone, Debug)]
-pub struct Genome {
+pub struct Genome<NT: NodeType, ND: Debug + Clone + Send> {
     link_genes: GeneList<LinkGene>,
-    node_genes: GeneList<NodeGene>,
-    network: ac::NetworkMap<Innovation, NodeType, u32, f64>,
+    node_genes: GeneList<NodeGene<NT, ND>>,
+    network: NetworkMap<Innovation, NT, ND, f64>,
 }
 
-impl Genotype for Genome {}
+impl<NT: NodeType, ND: Debug + Clone + Send> Genotype for Genome<NT, ND> {}
 
-impl Genome {
-    pub fn new() -> Genome {
+impl<NT: NodeType, ND: Debug + Clone + Send> Genome<NT, ND> {
+    pub fn new() -> Self {
         Genome {
             link_genes: GeneList::new(),
             node_genes: GeneList::new(),
-            network: ac::NetworkMap::new(),
+            network: NetworkMap::new(),
         }
     }
 
     pub fn visit_node_genes<F>(&self, mut f: F)
-        where F: FnMut(&NodeGene)
+        where F: FnMut(&NodeGene<NT, ND>)
     {
         for node_gene_w in self.node_genes.genes().iter() {
             f(node_gene_w.as_ref())
@@ -126,10 +106,10 @@ impl Genome {
         self.link_genes.insert(link_gene);
     }
 
-    pub fn add_node(&mut self, node_gene: NodeGene) {
+    pub fn add_node(&mut self, node_gene: NodeGene<NT, ND>) {
         self.network.add_node(node_gene.innovation(),
-                              node_gene.node_type,
-                              node_gene.activation_function);
+                              node_gene.node_type.clone(),
+                              node_gene.node_data.clone());
         self.node_genes.push(node_gene);
     }
 
@@ -167,20 +147,18 @@ impl Genome {
         }
 
         // now we have to check that the link genes do not introduce a cycle, and remove those that do.
-        let mut net: ac::NetworkMap<Innovation, NodeType, u32, f64> = ac::NetworkMap::new();
-        // let mut innov_node_idx_map: BTreeMap<Innovation, ac::NodeIndex> = BTreeMap::new();
+        let mut net = NetworkMap::new();
+
         // At first, add all nodes to the graph
         for node_gene in new_node_genes.genes().iter() {
             let node = node_gene.as_ref();
-            net.add_node(node.innovation(), node.node_type, node.activation_function);
-            // let idx = net.add_node(node_gene.as_ref().node_type, node_gene.as_ref().activation_function);
-            // innov_node_idx_map.insert(node_gene.as_ref().innovation(), idx);
+            net.add_node(node.innovation(),
+                         node.node_type.clone(),
+                         node.node_data.clone());
         }
 
         // now only retain those link genes, which would not introduce a cycle
         new_link_genes.retain(|link_gene| {
-            // let source_idx = innov_node_idx_map[&link_gene.source_node_gene];
-            // let target_idx = innov_node_idx_map[&link_gene.target_node_gene];
             if net.link_would_cycle(link_gene.source_node_gene, link_gene.target_node_gene) {
                 false
             } else {
@@ -215,15 +193,14 @@ impl Genome {
     }
 }
 
-
 pub struct GenomeDistance {
     pub excess: f64,
     pub disjoint: f64,
     pub weight: f64,
 }
 
-impl Distance<Genome> for GenomeDistance {
-    fn distance(&self, genome_left: &Genome, genome_right: &Genome) -> f64 {
+impl<NT: NodeType, ND: Debug + Clone + Send> Distance<Genome<NT, ND>> for GenomeDistance {
+    fn distance(&self, genome_left: &Genome<NT, ND>, genome_right: &Genome<NT, ND>) -> f64 {
         let genes_left = &genome_left.link_genes;
         let genes_right = &genome_right.link_genes;
 
@@ -245,35 +222,51 @@ impl Distance<Genome> for GenomeDistance {
     }
 }
 /// This trait is used to specialize link weight creation and node activation function creation.
-pub trait ElementStrategy {
+pub trait ElementStrategy<NT, ND>
+where NT: NodeType,
+      ND: Clone + Debug + Send,
+{
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64;
-    fn random_activation_function<R: Rng>(rng: &mut R) -> u32;
-    fn null_activation_function() -> u32;
+    fn random_activation_function<R: Rng>(rng: &mut R) -> ND;
+    fn null_activation_function() -> ND;
+    fn default_node_type() -> NT;
 }
 
 #[derive(Debug)]
-pub struct Environment<S: ElementStrategy> {
+pub struct Environment<NT, ND, S>
+    where NT: NodeType,
+          ND: Debug + Clone + Send,
+          S: ElementStrategy<NT, ND>
+{
     node_innovation_counter: Innovation,
     link_innovation_counter: Innovation,
     // (src_node, target_node) -> link_innovation
     link_innovation_cache: BTreeMap<(Innovation, Innovation), Innovation>,
     _marker_s: PhantomData<S>,
+    _marker_nt: PhantomData<NT>,
+    _marker_nd: PhantomData<ND>,
 }
 
-impl<S: ElementStrategy> Environment<S> {
-    pub fn new() -> Environment<S> {
+impl<NT, ND, S> Environment<NT, ND, S>
+    where NT: NodeType,
+          ND: Debug + Clone + Send,
+          S: ElementStrategy<NT, ND>
+{
+    pub fn new() -> Self {
         Environment {
             node_innovation_counter: Innovation::new(0),
             link_innovation_counter: Innovation::new(0),
             link_innovation_cache: BTreeMap::new(),
             _marker_s: PhantomData,
+            _marker_nt: PhantomData,
+            _marker_nd: PhantomData,
         }
     }
 
     /// Adds a link to `genome` without checking if the addition of this
     /// link would introduce a cycle or would otherwise be illegal.
     fn add_link(&mut self,
-                genome: &mut Genome,
+                genome: &mut Genome<NT, ND>,
                 source_node: Innovation,
                 target_node: Innovation,
                 weight: f64) {
@@ -306,10 +299,10 @@ impl<S: ElementStrategy> Environment<S> {
     }
 
     pub fn mutate<R: Rng>(&mut self,
-                          genome: &Genome,
+                          genome: &Genome<NT, ND>,
                           method: MutateMethod,
                           rng: &mut R)
-                          -> Option<Genome> {
+                          -> Option<Genome<NT, ND>> {
         match method {
             MutateMethod::ModifyWeight => {
                 // XXX
@@ -321,9 +314,9 @@ impl<S: ElementStrategy> Environment<S> {
     }
 
     pub fn mutate_add_connection<R: Rng>(&mut self,
-                                         genome: &Genome,
+                                         genome: &Genome<NT, ND>,
                                          rng: &mut R)
-                                         -> Option<Genome> {
+                                         -> Option<Genome<NT, ND>> {
         genome.network.find_random_unconnected_link_no_cycle(rng).map(|(&src, &target)| {
             let mut offspring = genome.clone();
             // Add new link to the offspring genome
@@ -332,9 +325,23 @@ impl<S: ElementStrategy> Environment<S> {
         })
     }
 
+    pub fn add_node_to_genome(&mut self,
+                              genome: &mut Genome<NT, ND>,
+                              node_type: NT,
+                              node_data: ND) {
+        genome.add_node(NodeGene {
+            innovation: self.node_innovation_counter.next().unwrap(),
+            node_type: node_type,
+            node_data: node_data,
+        });
+    }
+
     /// choose a random link. split it in half.
     /// XXX: activate if link is inactive?
-    pub fn mutate_add_node<R: Rng>(&mut self, genome: &Genome, rng: &mut R) -> Option<Genome> {
+    pub fn mutate_add_node<R: Rng>(&mut self,
+                                   genome: &Genome<NT, ND>,
+                                   rng: &mut R)
+                                   -> Option<Genome<NT, ND>> {
         genome.find_random_active_link_gene(rng).map(|link_innov| {
             // split link in half.
             let mut offspring = genome.clone();
@@ -342,8 +349,8 @@ impl<S: ElementStrategy> Environment<S> {
             // add new node
             offspring.add_node(NodeGene {
                 innovation: new_node_innovation,
-                node_type: NodeType::Hidden,
-                activation_function: S::random_activation_function(rng),
+                node_type: S::default_node_type(), // XXX: new node type
+                node_data: S::random_activation_function(rng),
             });
 
             // disable `link_innov` in offspring
@@ -370,28 +377,5 @@ impl<S: ElementStrategy> Environment<S> {
                           S::random_link_weight(rng));
             offspring
         })
-    }
-
-    // Generates a Genome with `n_inputs` input nodes and `n_outputs` output nodes.
-    // The genome will not have any link nodes.
-    pub fn generate_genome(&mut self, n_inputs: usize, n_outputs: usize) -> Genome {
-        assert!(n_inputs > 0 && n_outputs > 0);
-
-        let mut genome = Genome::new();
-        for _ in 0..n_inputs {
-            genome.add_node(NodeGene {
-                innovation: self.node_innovation_counter.next().unwrap(),
-                node_type: NodeType::Input,
-                activation_function: S::null_activation_function(),
-            });
-        }
-        for _ in 0..n_outputs {
-            genome.add_node(NodeGene {
-                innovation: self.node_innovation_counter.next().unwrap(),
-                node_type: NodeType::Output,
-                activation_function: S::null_activation_function(),
-            });
-        }
-        genome
     }
 }
