@@ -9,14 +9,12 @@ extern crate cppn;
 mod common;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{Genome, GenomeDistance, Environment, ElementStrategy};
+use neat::genomes::acyclic_network::{Genome, Environment, ElementStrategy};
 use neat::fitness::Fitness;
-use neat::crossover::ProbabilisticCrossover;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use neat::mutate::MutateMethodWeighting;
 use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str};
 use cppn::cppn::{Cppn, CppnNodeType};
 use cppn::bipolar::BipolarActivationFunction;
@@ -55,7 +53,7 @@ impl FitnessEvaluator {
             }
         }
         let graph = builder.graph();
-        //println!("graph: {:#?}", graph);
+        // println!("graph: {:#?}", graph);
 
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
@@ -128,26 +126,9 @@ fn main() {
 
     let mut mater = Mater {
         p_crossover: Closed01(0.5),
-        p_crossover_detail: ProbabilisticCrossover {
-            prob_match_left: Closed01(0.5), /* NEAT always selects a random parent for matching genes */
-            prob_disjoint_left: Closed01(0.9),
-            prob_excess_left: Closed01(0.9),
-            prob_disjoint_right: Closed01(0.15),
-            prob_excess_right: Closed01(0.15),
-        },
-        mutate_weights: MutateMethodWeighting {
-            w_modify_weight: 1,
-            w_add_node: 1,
-            w_add_connection: 1,
-        },
-
+        p_crossover_detail: common::default_probabilistic_crossover(),
+        mutate_weights: common::default_mutate_weights(),
         env: &mut env,
-    };
-
-    let compatibility = GenomeDistance {
-        excess: 1.0,
-        disjoint: 1.0,
-        weight: 0.0,
     };
 
     let mut runner = Runner {
@@ -156,7 +137,7 @@ fn main() {
         selection_percentage: Closed01(0.2),
         tournament_k: 3,
         compatibility_threshold: 1.0,
-        compatibility: &compatibility,
+        compatibility: &common::default_genome_compatibility(),
         mate: &mut mater,
         fitness: &|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64),
         _marker: PhantomData,

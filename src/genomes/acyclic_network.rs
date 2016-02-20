@@ -300,6 +300,10 @@ impl<NT, S> Environment<NT, S>
                 None
             }
             MutateMethod::AddConnection => self.mutate_add_connection(genome, rng),
+            MutateMethod::DeleteConnection => {
+                // XXX
+                None
+            }
             MutateMethod::AddNode => self.mutate_add_node(genome, rng),
         }
     }

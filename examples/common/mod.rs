@@ -1,7 +1,8 @@
 use std::fs::File;
 use std::io::Read;
 use graph_neighbor_matching::graph::OwnedGraph;
-use neat::genomes::acyclic_network::{NodeType, Genome, Environment, ElementStrategy};
+use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, Environment,
+                                     ElementStrategy};
 use neat::crossover::ProbabilisticCrossover;
 use graph_io_gml::parse_gml;
 use rand::{Rng, Closed01};
@@ -11,6 +12,34 @@ use neat::prob::is_probable;
 use std::fmt::Debug;
 use graph_neighbor_matching::NodeColorMatching;
 use closed01;
+
+pub fn default_genome_compatibility() -> GenomeDistance {
+    GenomeDistance {
+        excess: 1.0,
+        disjoint: 1.0,
+        weight: 0.0,
+    }
+}
+
+pub fn default_probabilistic_crossover() -> ProbabilisticCrossover {
+    ProbabilisticCrossover {
+        prob_match_left: Closed01(0.5), // NEAT always selects a random parent for matching genes
+        prob_disjoint_left: Closed01(0.9),
+        prob_excess_left: Closed01(0.9),
+        prob_disjoint_right: Closed01(0.15),
+        prob_excess_right: Closed01(0.15),
+    }
+}
+
+pub fn default_mutate_weights() -> MutateMethodWeighting {
+    // XXX:
+    MutateMethodWeighting {
+        w_modify_weight: 100,
+        w_add_node: 1,
+        w_add_connection: 10,
+        w_delete_connection: 1,
+    }
+}
 
 pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGraph<N>
     where N: Clone + Debug,
