@@ -1,4 +1,4 @@
-[ ] The way we do crossover right now can easily introduce cycles in
+[x] The way we do crossover right now can easily introduce cycles in
     the graph. We want to avoid that. For every excess or disjoint gene,
     check if it creates a cycle. Matching genes cannot introduce cycles.
 [ ] Implement the mutation of weights.
