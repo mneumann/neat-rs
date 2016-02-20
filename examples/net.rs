@@ -8,7 +8,8 @@ extern crate petgraph;
 mod common;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, Environment, ElementStrategy};
+use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, Environment,
+                                     ElementStrategy};
 use neat::fitness::Fitness;
 use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
@@ -65,9 +66,9 @@ fn genome_to_graph(genome: &Genome<Node>) -> OwnedGraph<Node> {
     });
 
     genome.visit_active_link_genes(|link_gene| {
-            builder.add_edge(link_gene.source_node_gene.get(),
-                             link_gene.target_node_gene.get(),
-                             closed01::Closed01::new(link_gene.weight as f32));
+        builder.add_edge(link_gene.source_node_gene.get(),
+                         link_gene.target_node_gene.get(),
+                         closed01::Closed01::new(link_gene.weight as f32));
 
     });
 
@@ -131,8 +132,8 @@ const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
 struct Mater<'a, NT, S>
-where NT: NodeType + 'a,
-      S: ElementStrategy<NT> + 'a,
+    where NT: NodeType + 'a,
+          S: ElementStrategy<NT> + 'a
 {
     // probability for crossover. P_mutate = 1.0 - p_crossover
     p_crossover: Closed01<f32>,
@@ -141,9 +142,9 @@ where NT: NodeType + 'a,
     env: &'a mut Environment<NT, S>,
 }
 
-impl<'a, NT, S> Mate<Genome<NT>> for Mater<'a, NT, S> 
-where NT: NodeType + 'a,
-      S: ElementStrategy<NT> + 'a,
+impl<'a, NT, S> Mate<Genome<NT>> for Mater<'a, NT, S>
+    where NT: NodeType + 'a,
+          S: ElementStrategy<NT> + 'a
 {
     // Add an argument that descibes whether both genomes are of equal fitness.
     // Pass individual, which includes the fitness.
@@ -169,9 +170,7 @@ where NT: NodeType + 'a,
 fn main() {
     let mut rng = rand::thread_rng();
 
-    let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph("examples/jeffress.gml"),
-    };
+    let fitness_evaluator = FitnessEvaluator { target_graph: load_graph("examples/jeffress.gml") };
 
     println!("{:?}", fitness_evaluator);
 
@@ -185,14 +184,14 @@ fn main() {
         let mut genome = Genome::new();
         assert!(INPUTS > 0 && OUTPUTS > 0);
 
-           for _ in 0..INPUTS {
-               env.add_node_to_genome(&mut genome, Node::Input);
-           }
-           for _ in 0..OUTPUTS {
-               env.add_node_to_genome(&mut genome, Node::Output);
-           }
-           genome
-   };
+        for _ in 0..INPUTS {
+            env.add_node_to_genome(&mut genome, Node::Input);
+        }
+        for _ in 0..OUTPUTS {
+            env.add_node_to_genome(&mut genome, Node::Output);
+        }
+        genome
+    };
 
     println!("{:#?}", template_genome);
 
