@@ -21,3 +21,4 @@ pub mod gene;
 pub mod gene_list;
 pub mod crossover;
 pub mod genomes;
+pub mod weight;
