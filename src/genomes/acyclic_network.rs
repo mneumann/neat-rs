@@ -10,7 +10,6 @@ use std::collections::BTreeMap;
 use std::cmp;
 use std::marker::PhantomData;
 use mutate::MutateMethod;
-use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
 pub struct NodeGene<NT: NodeType> {
