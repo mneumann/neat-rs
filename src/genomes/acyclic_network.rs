@@ -4,7 +4,7 @@ use gene_list::GeneList;
 use traits::{Distance, Genotype};
 use crossover::Crossover;
 use rand::Rng;
-use acyclic_network::NetworkMap;
+use acyclic_network::{Network, NetworkMap};
 pub use acyclic_network::NodeType;
 use std::collections::BTreeMap;
 use std::cmp;
@@ -77,6 +77,10 @@ impl<NT: NodeType> Genome<NT> {
             node_genes: GeneList::new(),
             network: NetworkMap::new(),
         }
+    }
+
+    pub fn network(&self) -> &Network<NT, f64> {
+        self.network.network()
     }
 
     pub fn visit_node_genes<F>(&self, mut f: F)

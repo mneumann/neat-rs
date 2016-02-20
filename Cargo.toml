@@ -15,7 +15,7 @@ rand = "0.3"
 rayon = { git = "https://github.com/nikomatsakis/rayon" }
 fixedbitset = "0.1.0"
 log = "0.3.5"
-#cppn = {git = "https://github.com/mneumann/cppn-rs"}
+cppn = {git = "https://github.com/mneumann/cppn-rs"}
 sorted-vec = {git = "https://github.com/mneumann/sorted-vec-rs"}
 acyclic-network = {git = "https://github.com/mneumann/acyclic-network-rs"}
 
