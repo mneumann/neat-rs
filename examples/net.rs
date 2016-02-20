@@ -1,9 +1,11 @@
 extern crate neat;
 extern crate rand;
 extern crate graph_neighbor_matching;
-extern crate graph_io_gml as gml;
+extern crate graph_io_gml;
 extern crate closed01;
 extern crate petgraph;
+
+mod common;
 
 use neat::population::{Population, Unrated, Runner};
 use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, Environment, ElementStrategy};
@@ -18,6 +20,7 @@ use std::marker::PhantomData;
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
 use neat::gene::Gene;
 use std::str::FromStr;
+use common::load_graph;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Node {
@@ -51,33 +54,6 @@ impl FromStr for Node {
             _ => Err("Invalid node type/weight"),
         }
     }
-}
-
-fn load_graph<N>(graph_file: &str) -> OwnedGraph<N>
-    where N: NodeType + FromStr<Err=&'static str>,
-{
-    use std::fs::File;
-    use std::io::Read;
-
-    let graph_s = {
-        let mut graph_file = File::open(graph_file).unwrap();
-        let mut graph_s = String::new();
-        let _ = graph_file.read_to_string(&mut graph_s).unwrap();
-        graph_s
-    };
-
-    let graph = gml::parse_gml(&graph_s,
-                               &|sexp| -> Option<N> {
-                                   sexp.and_then(|se| se.get_str().map(|s| {
-                                       match N::from_str(s) {
-                                           Ok(n) => n,
-                                           Err(err) => panic!(err),
-                                       }
-                                   }))
-                               },
-                               &|_| -> Option<()> { Some(()) })
-                    .unwrap();
-    OwnedGraph::from_petgraph(&graph)
 }
 
 fn genome_to_graph(genome: &Genome<Node>) -> OwnedGraph<Node> {
