@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::fs::File;
 use std::io::Read;
 use graph_neighbor_matching::graph::OwnedGraph;
@@ -10,8 +9,9 @@ use neat::mutate::{MutateMethod, MutateMethodWeighting};
 use neat::traits::Mate;
 use neat::prob::is_probable;
 
-pub fn load_graph<N>(graph_file: &str) -> OwnedGraph<N>
-    where N: NodeType + FromStr<Err = &'static str>
+pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGraph<N>
+    where N: NodeType,
+          F: Fn(&str) -> N
 {
 
     let graph_s = {
@@ -23,14 +23,7 @@ pub fn load_graph<N>(graph_file: &str) -> OwnedGraph<N>
 
     let graph = parse_gml(&graph_s,
                           &|sexp| -> Option<N> {
-                              sexp.and_then(|se| {
-                                  se.get_str().map(|s| {
-                                      match N::from_str(s) {
-                                          Ok(n) => n,
-                                          Err(err) => panic!(err),
-                                      }
-                                  })
-                              })
+                              sexp.and_then(|se| se.get_str().map(|s| convert_node_from_str(s)))
                           },
                           &|_| -> Option<()> { Some(()) })
                     .unwrap();

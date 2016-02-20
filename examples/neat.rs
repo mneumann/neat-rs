@@ -16,9 +16,8 @@ use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use neat::mutate::{MutateMethodWeighting};
+use neat::mutate::MutateMethodWeighting;
 use neat::gene::Gene;
-use std::str::FromStr;
 use common::{load_graph, Mater};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -43,15 +42,12 @@ impl NodeType for Node {
     }
 }
 
-impl FromStr for Node {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "input" => Ok(Node::Input),
-            "output" => Ok(Node::Output),
-            "hidden" => Ok(Node::Hidden),
-            _ => Err("Invalid node type/weight"),
-        }
+fn convert_node_from_str(s: &str) -> Node {
+    match s {
+        "input" => Node::Input,
+        "output" => Node::Output,
+        "hidden" => Node::Hidden,
+        _ => panic!("Invalid node type/weight"),
     }
 }
 
@@ -133,7 +129,9 @@ const OUTPUTS: usize = 3;
 fn main() {
     let mut rng = rand::thread_rng();
 
-    let fitness_evaluator = FitnessEvaluator { target_graph: load_graph("examples/jeffress.gml") };
+    let fitness_evaluator = FitnessEvaluator {
+        target_graph: load_graph("examples/jeffress.gml", convert_node_from_str),
+    };
 
     println!("{:?}", fitness_evaluator);
 
