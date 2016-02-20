@@ -7,7 +7,7 @@ dependencies = [
  "cppn 0.0.1 (git+https://github.com/mneumann/cppn-rs)",
  "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "graph-io-gml 0.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "graph-neighbor-matching 0.5.0 (git+https://github.com/mneumann/graph-neighbor-matching)",
+ "graph-neighbor-matching 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "petgraph 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -70,7 +70,7 @@ dependencies = [
 [[package]]
 name = "graph-neighbor-matching"
 version = "0.5.0"
-source = "git+https://github.com/mneumann/graph-neighbor-matching#7eaebc1f11d769a944c600331583100bb4d2b807"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "closed01 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "munkres 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
