@@ -55,7 +55,7 @@ impl FitnessEvaluator {
             }
         }
         let graph = builder.graph();
-        println!("graph: {:#?}", graph);
+        //println!("graph: {:#?}", graph);
 
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
