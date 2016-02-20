@@ -11,17 +11,15 @@ use neat::population::{Population, Unrated, Runner};
 use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, Environment,
                                      ElementStrategy};
 use neat::fitness::Fitness;
-use neat::traits::Mate;
 use neat::crossover::ProbabilisticCrossover;
-use neat::prob::is_probable;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use neat::mutate::{MutateMethod, MutateMethodWeighting};
+use neat::mutate::{MutateMethodWeighting};
 use neat::gene::Gene;
 use std::str::FromStr;
-use common::load_graph;
+use common::{load_graph, Mater};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Node {
@@ -131,41 +129,6 @@ const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
 
-struct Mater<'a, NT, S>
-    where NT: NodeType + 'a,
-          S: ElementStrategy<NT> + 'a
-{
-    // probability for crossover. P_mutate = 1.0 - p_crossover
-    p_crossover: Closed01<f32>,
-    p_crossover_detail: ProbabilisticCrossover,
-    mutate_weights: MutateMethodWeighting,
-    env: &'a mut Environment<NT, S>,
-}
-
-impl<'a, NT, S> Mate<Genome<NT>> for Mater<'a, NT, S>
-    where NT: NodeType + 'a,
-          S: ElementStrategy<NT> + 'a
-{
-    // Add an argument that descibes whether both genomes are of equal fitness.
-    // Pass individual, which includes the fitness.
-    fn mate<R: Rng>(&mut self,
-                    parent_left: &Genome<NT>,
-                    parent_right: &Genome<NT>,
-                    prefer_mutate: bool,
-                    rng: &mut R)
-                    -> Genome<NT> {
-        if prefer_mutate == false && is_probable(&self.p_crossover, rng) {
-            Genome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
-        } else {
-            // mutate
-            let mutate_method = MutateMethod::random_with(&self.mutate_weights, rng);
-            self.env
-                .mutate(parent_left, mutate_method, rng)
-                .or_else(|| self.env.mutate(parent_right, mutate_method, rng))
-                .unwrap_or_else(|| parent_left.clone())
-        }
-    }
-}
 
 fn main() {
     let mut rng = rand::thread_rng();
