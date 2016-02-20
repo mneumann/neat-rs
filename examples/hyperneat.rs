@@ -66,6 +66,10 @@ impl FitnessEvaluator {
 struct ES;
 
 impl ElementStrategy<Node> for ES {
+    fn full_link_weight() -> f64 {
+        1.0
+    }
+
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
         // XXX Choose a weight between -1 and 1?
         rng.gen()

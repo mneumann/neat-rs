@@ -224,6 +224,7 @@ pub trait ElementStrategy<NT: NodeType>
 {
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64;
     fn random_node_type<R: Rng>(rng: &mut R) -> NT;
+    fn full_link_weight() -> f64;
 }
 
 #[derive(Debug)]
@@ -342,24 +343,29 @@ impl<NT, S> Environment<NT, S>
             // we keep this gene (but disable it), because this allows us to have a structurally
             // compatible genome to the old one, as disabled genes are taken into account for
             // the genomic distance measure.
-            let (orig_src_node, orig_target_node) = {
+            let (orig_src_node, orig_target_node, orig_weight) = {
                 let mut orig_link = offspring.link_genes
                                              .find_by_innovation_mut(link_innov)
                                              .unwrap();
                 orig_link.disable();
                 // add two new link innovations with the new node in the middle.
                 // XXX: Choose random weights? Or split weight? We use random weights for now.
-                (orig_link.source_node_gene, orig_link.target_node_gene)
+                (orig_link.source_node_gene,
+                 orig_link.target_node_gene,
+                 orig_link.weight)
             };
-            // adding these two links cannot create a cycle.
+            // Adding these two links cannot create a cycle.
+            // The first link re-uses the same weight as the original link.
+            // We make the weight of the second link full strenght. We want
+            // to make the modification as little as possible.
             self.add_link(&mut offspring,
                           orig_src_node,
                           new_node_innovation,
-                          S::random_link_weight(rng));
+                          orig_weight);
             self.add_link(&mut offspring,
                           new_node_innovation,
                           orig_target_node,
-                          S::random_link_weight(rng));
+                          S::full_link_weight());
             offspring
         })
     }
