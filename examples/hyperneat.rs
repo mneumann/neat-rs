@@ -9,21 +9,19 @@ extern crate cppn;
 mod common;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, Environment,
-                                     ElementStrategy};
+use neat::genomes::acyclic_network::{Genome, GenomeDistance, Environment, ElementStrategy};
 use neat::fitness::Fitness;
 use neat::crossover::ProbabilisticCrossover;
-use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
+use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
 use neat::mutate::MutateMethodWeighting;
-use neat::gene::Gene;
 use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str};
 use cppn::cppn::{Cppn, CppnNodeType};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
-use cppn::position::{Position, Position2d};
+use cppn::position::Position2d;
 
 type Node = CppnNodeType<BipolarActivationFunction>;
 
@@ -31,14 +29,6 @@ type Node = CppnNodeType<BipolarActivationFunction>;
 struct FitnessEvaluator {
     target_graph: OwnedGraph<Neuron>,
 }
-
-// fn develop_graph_from_substrate<P: Position, T: Clone + Debug>(substrate: &Substrate<P, T>,
-// cppn: &mut Cppn)
-// -> OwnedGraph<T> {
-// return graph;
-// }
-//
-//
 
 impl FitnessEvaluator {
     // A larger fitness means "better"
