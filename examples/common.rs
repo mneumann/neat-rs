@@ -8,9 +8,10 @@ use rand::{Rng, Closed01};
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
 use neat::traits::Mate;
 use neat::prob::is_probable;
+use std::fmt::Debug;
 
 pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGraph<N>
-    where N: NodeType,
+    where N: Clone + Debug,
           F: Fn(&str) -> N
 {
 
