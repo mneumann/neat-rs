@@ -9,6 +9,8 @@ use neat::mutate::{MutateMethod, MutateMethodWeighting};
 use neat::traits::Mate;
 use neat::prob::is_probable;
 use std::fmt::Debug;
+use graph_neighbor_matching::NodeColorMatching;
+use closed01;
 
 pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGraph<N>
     where N: Clone + Debug,
@@ -63,6 +65,62 @@ impl<'a, N, S> Mate<Genome<N>> for Mater<'a, N, S>
                 .mutate(parent_left, mutate_method, rng)
                 .or_else(|| self.env.mutate(parent_right, mutate_method, rng))
                 .unwrap_or_else(|| parent_left.clone())
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Neuron {
+    Input,
+    Output,
+    Hidden,
+}
+
+impl NodeType for Neuron {
+    fn accept_incoming_links(&self) -> bool {
+        match *self {
+            Neuron::Input => false,
+            _ => true,
+        }
+    }
+    fn accept_outgoing_links(&self) -> bool {
+        match *self {
+            Neuron::Output => false,
+            _ => true,
+        }
+    }
+}
+
+pub fn convert_neuron_from_str(s: &str) -> Neuron {
+    match s {
+        "input" => Neuron::Input,
+        "output" => Neuron::Output,
+        "hidden" => Neuron::Hidden,
+        _ => panic!("Invalid node type/weight"),
+    }
+}
+
+#[derive(Debug)]
+pub struct NodeColors;
+
+impl NodeColorMatching<Neuron> for NodeColors {
+    fn node_color_matching(&self,
+                           node_i_value: &Neuron,
+                           node_j_value: &Neuron)
+                           -> closed01::Closed01<f32> {
+
+        // Treat nodes as equal regardless of their activation function or input/output number.
+        let eq = match (node_i_value, node_j_value) {
+            (&Neuron::Input, &Neuron::Input) => true,
+            (&Neuron::Output, &Neuron::Output) => true,
+            (&Neuron::Hidden, &Neuron::Hidden) => true,
+            _ => false,
+        };
+
+        if eq {
+            closed01::Closed01::one()
+        } else {
+            closed01::Closed01::zero()
         }
     }
 }

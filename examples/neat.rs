@@ -8,50 +8,18 @@ extern crate petgraph;
 mod common;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, Environment,
-                                     ElementStrategy};
+use neat::genomes::acyclic_network::{Genome, GenomeDistance, Environment, ElementStrategy};
 use neat::fitness::Fitness;
 use neat::crossover::ProbabilisticCrossover;
-use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
+use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
 use neat::mutate::MutateMethodWeighting;
 use neat::gene::Gene;
-use common::{load_graph, Mater};
+use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Node {
-    Input,
-    Output,
-    Hidden,
-}
-
-impl NodeType for Node {
-    fn accept_incoming_links(&self) -> bool {
-        match *self {
-            Node::Input => false,
-            _ => true,
-        }
-    }
-    fn accept_outgoing_links(&self) -> bool {
-        match *self {
-            Node::Output => false,
-            _ => true,
-        }
-    }
-}
-
-fn convert_node_from_str(s: &str) -> Node {
-    match s {
-        "input" => Node::Input,
-        "output" => Node::Output,
-        "hidden" => Node::Hidden,
-        _ => panic!("Invalid node type/weight"),
-    }
-}
-
-fn genome_to_graph(genome: &Genome<Node>) -> OwnedGraph<Node> {
+fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
     let mut builder = GraphBuilder::new();
 
     genome.visit_node_genes(|node_gene| {
@@ -69,39 +37,15 @@ fn genome_to_graph(genome: &Genome<Node>) -> OwnedGraph<Node> {
     return builder.graph();
 }
 
-#[derive(Debug)]
-struct NodeColors;
-
-impl NodeColorMatching<Node> for NodeColors {
-    fn node_color_matching(&self,
-                           node_i_value: &Node,
-                           node_j_value: &Node)
-                           -> closed01::Closed01<f32> {
-
-        // Treat nodes as equal regardless of their activation function or input/output number.
-        let eq = match (node_i_value, node_j_value) {
-            (&Node::Input, &Node::Input) => true,
-            (&Node::Output, &Node::Output) => true,
-            (&Node::Hidden, &Node::Hidden) => true,
-            _ => false,
-        };
-
-        if eq {
-            closed01::Closed01::one()
-        } else {
-            closed01::Closed01::zero()
-        }
-    }
-}
 
 #[derive(Debug)]
 struct FitnessEvaluator {
-    target_graph: OwnedGraph<Node>,
+    target_graph: OwnedGraph<Neuron>,
 }
 
 impl FitnessEvaluator {
     // A larger fitness means "better"
-    fn fitness(&self, genome: &Genome<Node>) -> f32 {
+    fn fitness(&self, genome: &Genome<Neuron>) -> f32 {
         let graph = genome_to_graph(genome);
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
@@ -111,13 +55,13 @@ impl FitnessEvaluator {
 
 struct ES;
 
-impl ElementStrategy<Node> for ES {
+impl ElementStrategy<Neuron> for ES {
     fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
         // XXX Choose a weight between -1 and 1?
         rng.gen()
     }
-    fn random_node_type<R: Rng>(_rng: &mut R) -> Node {
-        Node::Hidden
+    fn random_node_type<R: Rng>(_rng: &mut R) -> Neuron {
+        Neuron::Hidden
     }
 }
 
@@ -130,13 +74,13 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph("examples/jeffress.gml", convert_node_from_str),
+        target_graph: load_graph("examples/jeffress.gml", convert_neuron_from_str),
     };
 
     println!("{:?}", fitness_evaluator);
 
     // start with minimal random topology.
-    let mut env: Environment<Node, ES> = Environment::new();
+    let mut env: Environment<Neuron, ES> = Environment::new();
 
     // Generates a template Genome with `n_inputs` input nodes and `n_outputs` output nodes.
     // The genome will not have any link nodes.
@@ -146,10 +90,10 @@ fn main() {
         assert!(INPUTS > 0 && OUTPUTS > 0);
 
         for _ in 0..INPUTS {
-            env.add_node_to_genome(&mut genome, Node::Input);
+            env.add_node_to_genome(&mut genome, Neuron::Input);
         }
         for _ in 0..OUTPUTS {
-            env.add_node_to_genome(&mut genome, Node::Output);
+            env.add_node_to_genome(&mut genome, Neuron::Output);
         }
         genome
     };
