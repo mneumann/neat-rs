@@ -223,11 +223,7 @@ fn main() {
     let mut initial_pop = Population::<_, Unrated>::new();
 
     for _ in 0..POP_SIZE {
-        // Add a single link gene! This is required, otherwise we can't determine
-        // correctly an InnovationRange.
-        let genome = env.mutate_add_connection(&template_genome, &mut rng).unwrap();
-
-        initial_pop.add_genome(Box::new(genome));
+        initial_pop.add_genome(Box::new(template_genome.clone()));
     }
     assert!(initial_pop.len() == POP_SIZE);
 
