@@ -15,9 +15,9 @@ use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, NodeColorMatching};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use std::fmt::Debug;
 use neat::mutate::{MutateMethod, MutateMethodWeighting};
 use neat::gene::Gene;
+use std::str::FromStr;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Node {
@@ -41,19 +41,20 @@ impl NodeType for Node {
     }
 }
 
-fn node_from_str(s: &str) -> Node {
-    match s {
-        "input" => Node::Input,
-        "output" => Node::Output,
-        "hidden" => Node::Hidden,
-        _ => panic!("Invalid node type/weight"),
+impl FromStr for Node {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "input" => Ok(Node::Input),
+            "output" => Ok(Node::Output),
+            "hidden" => Ok(Node::Hidden),
+            _ => Err("Invalid node type/weight"),
+        }
     }
 }
 
-// NT is the returned node type
-fn load_graph<NT, F>(graph_file: &str, node_weight_fn: &F) -> OwnedGraph<NT>
-    where F: Fn(&str) -> NT,
-          NT: Clone + Debug
+fn load_graph<N>(graph_file: &str) -> OwnedGraph<N>
+    where N: NodeType + FromStr<Err=&'static str>,
 {
     use std::fs::File;
     use std::io::Read;
@@ -66,8 +67,13 @@ fn load_graph<NT, F>(graph_file: &str, node_weight_fn: &F) -> OwnedGraph<NT>
     };
 
     let graph = gml::parse_gml(&graph_s,
-                               &|sexp| -> Option<NT> {
-                                   sexp.and_then(|se| se.get_str().map(|s| node_weight_fn(s)))
+                               &|sexp| -> Option<N> {
+                                   sexp.and_then(|se| se.get_str().map(|s| {
+                                       match N::from_str(s) {
+                                           Ok(n) => n,
+                                           Err(err) => panic!(err),
+                                       }
+                                   }))
                                },
                                &|_| -> Option<()> { Some(()) })
                     .unwrap();
@@ -188,7 +194,7 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph("examples/jeffress.gml", &node_from_str),
+        target_graph: load_graph("examples/jeffress.gml"),
     };
 
     println!("{:?}", fitness_evaluator);
