@@ -16,6 +16,7 @@ use rand::{Rng, Closed01};
 use std::marker::PhantomData;
 use neat::gene::Gene;
 use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str};
+use neat::weight::WeightRange;
 
 fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
     let mut builder = GraphBuilder::new();
@@ -54,13 +55,15 @@ impl FitnessEvaluator {
 struct ES;
 
 impl ElementStrategy<Neuron> for ES {
+    fn link_weight_range() -> WeightRange {
+        WeightRange::bipolar(1.0)
+    }
+
+    // XXX: link_weight_range().high?
     fn full_link_weight() -> f64 {
         1.0
     }
-    fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
-        // XXX Choose a weight between -1 and 1?
-        rng.gen()
-    }
+
     fn random_node_type<R: Rng>(_rng: &mut R) -> Neuron {
         Neuron::Hidden
     }

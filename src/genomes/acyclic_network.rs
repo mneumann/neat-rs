@@ -3,13 +3,14 @@ use gene::Gene;
 use gene_list::GeneList;
 use traits::{Distance, Genotype};
 use crossover::Crossover;
-use rand::Rng;
+use rand::{Closed01, Rng};
 use acyclic_network::{Network, NetworkMap};
 pub use acyclic_network::NodeType;
 use std::collections::BTreeMap;
 use std::cmp;
 use std::marker::PhantomData;
 use mutate::MutateMethod;
+use weight::{Weight, WeightRange, WeightPerturbanceMethod};
 
 #[derive(Debug, Clone)]
 pub struct NodeGene<NT: NodeType> {
@@ -50,6 +51,13 @@ impl Gene for LinkGene {
 
     fn innovation(&self) -> Innovation {
         self.innovation
+    }
+}
+
+impl LinkGene {
+    fn mutate_weight<R: Rng>(&mut self, perturbance: &WeightPerturbanceMethod, range: &WeightRange, rng: &mut R) {
+        let new_weight = perturbance.perturb(Weight(self.weight), range, rng);
+        self.weight = new_weight.0;
     }
 }
 
@@ -126,7 +134,7 @@ impl<NT: NodeType> Genome<NT> {
                     },
                     rng);
 
-        // As the crossover of node genes might lead out some nodes which
+        // As the crossover of node genes might leave out some nodes which
         // we need for connections, we have to make sure that they exist.
         c.crossover(&left.link_genes,
                     &right.link_genes,
@@ -222,9 +230,9 @@ impl<NT: NodeType> Distance<Genome<NT>> for GenomeDistance {
 /// This trait is used to specialize link weight creation and node activation function creation.
 pub trait ElementStrategy<NT: NodeType>
 {
-    fn random_link_weight<R: Rng>(rng: &mut R) -> f64;
-    fn random_node_type<R: Rng>(rng: &mut R) -> NT;
+    fn link_weight_range() -> WeightRange;
     fn full_link_weight() -> f64;
+    fn random_node_type<R: Rng>(rng: &mut R) -> NT;
 }
 
 #[derive(Debug)]
@@ -297,6 +305,8 @@ impl<NT, S> Environment<NT, S>
         match method {
             MutateMethod::ModifyWeight => {
                 // XXX
+                // FixedQuantity or Proportional mutation
+                // mutate each weight with a specific probability
                 None
             }
             MutateMethod::AddConnection => self.mutate_add_connection(genome, rng),
@@ -308,6 +318,20 @@ impl<NT, S> Environment<NT, S>
         }
     }
 
+    /// Uniformly modify the weight of connection genes, each with a
+    /// probability of `mutate_prob`. Guaranteed to make a change.
+    pub fn mutate_connection_weights_uniformly<R: Rng>(&self,
+                                                       genome: &Genome<NT>,
+                                                       mutate_prob: Closed01<f64>,
+                                                       perturbance: &WeightPerturbanceMethod,
+                                                       rng: &mut R)
+                                                       -> Genome<NT> {
+        let mut offspring = genome.clone();
+        unimplemented!();
+        //offspring.link_genes
+        offspring
+    }
+
     pub fn mutate_add_connection<R: Rng>(&mut self,
                                          genome: &Genome<NT>,
                                          rng: &mut R)
@@ -315,7 +339,7 @@ impl<NT, S> Environment<NT, S>
         genome.network.find_random_unconnected_link_no_cycle(rng).map(|(&src, &target)| {
             let mut offspring = genome.clone();
             // Add new link to the offspring genome
-            self.add_link(&mut offspring, src, target, S::random_link_weight(rng));
+            self.add_link(&mut offspring, src, target, S::link_weight_range().random_weight(rng).0);
             offspring
         })
     }

@@ -18,7 +18,7 @@ dependencies = [
 [[package]]
 name = "acyclic-network"
 version = "0.0.1"
-source = "git+https://github.com/mneumann/acyclic-network-rs#cea054e4d3cfb7cf461dab601d5fc2cd6914d2cc"
+source = "git+https://github.com/mneumann/acyclic-network-rs#a5d7eec5708e76afa44da9b47656b1a920954719"
 dependencies = [
  "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -40,9 +40,10 @@ dependencies = [
 [[package]]
 name = "cppn"
 version = "0.0.1"
-source = "git+https://github.com/mneumann/cppn-rs#5bd95b2c2a76b3c8335ac49978acaa5808dbc16a"
+source = "git+https://github.com/mneumann/cppn-rs#7399ba3cf02c4165f1c6a2a41fc9409a2fed5e9c"
 dependencies = [
  "acyclic-network 0.0.1 (git+https://github.com/mneumann/acyclic-network-rs)",
+ "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -171,7 +172,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "sorted-vec"
 version = "0.0.1"
-source = "git+https://github.com/mneumann/sorted-vec-rs#8730a05151762d3f78b8ff81eed1f27514febd7f"
+source = "git+https://github.com/mneumann/sorted-vec-rs#55e07cfe110cf6e5bde7a7abe6de36a4629897e2"
 
 [[package]]
 name = "winapi"

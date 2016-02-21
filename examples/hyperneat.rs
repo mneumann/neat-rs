@@ -20,6 +20,7 @@ use cppn::cppn::{Cppn, CppnNodeType};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
 use cppn::position::Position2d;
+use neat::weight::WeightRange;
 
 type Node = CppnNodeType<BipolarActivationFunction>;
 
@@ -64,13 +65,12 @@ impl FitnessEvaluator {
 struct ES;
 
 impl ElementStrategy<Node> for ES {
-    fn full_link_weight() -> f64 {
-        1.0
+    fn link_weight_range() -> WeightRange {
+        WeightRange::bipolar(1.0)
     }
 
-    fn random_link_weight<R: Rng>(rng: &mut R) -> f64 {
-        // XXX Choose a weight between -1 and 1?
-        rng.gen()
+    fn full_link_weight() -> f64 {
+        1.0
     }
 
     fn random_node_type<R: Rng>(rng: &mut R) -> Node {
