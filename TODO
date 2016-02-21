@@ -1,6 +1,8 @@
-[x] The way we do crossover right now can easily introduce cycles in
-    the graph. We want to avoid that. For every excess or disjoint gene,
-    check if it creates a cycle. Matching genes cannot introduce cycles.
+[ ] A link gene can be uniquely identified by their source and target node
+    innovation numbers (if we disallow multiple links between two nodes).
+[ ] Use a single representation instead of trying to keep the node/link
+    gene list and the network representation in sync. This will simply
+    the code a lot.
 [ ] Implement the mutation of weights.
 [ ] Add DeleteConnection structural mutation
 [ ] Include node gene compatibility into the overall compatibility measure
