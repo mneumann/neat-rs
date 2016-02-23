@@ -1,8 +1,12 @@
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct AlignmentMetric {
     pub matching: usize,
     pub disjoint: usize,
     pub excess: usize,
     pub weight_distance: f64,
+}
+
+impl Eq for AlignmentMetric {
 }
 
 impl AlignmentMetric {

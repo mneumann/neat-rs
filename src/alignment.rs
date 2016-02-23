@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Alignment<T> {
     Match(T, T),
@@ -16,6 +18,66 @@ impl<T> Alignment<T> {
             _ => false,
         }
     }
+
+    pub fn get_left(&self) -> Option<&T> {
+        match *self {
+            Alignment::Match(..) => None,
+
+            Alignment::ExcessLeftHead(ref a) | 
+            Alignment::ExcessLeftTail(ref a) |
+            Alignment::DisjointLeft(ref a) => Some(a),
+
+            Alignment::ExcessRightHead(..) |
+            Alignment::ExcessRightTail(..) |
+            Alignment::DisjointRight(..) => None,
+        }
+    }
+
+    pub fn get_right(&self) -> Option<&T> {
+        match *self {
+            Alignment::Match(..) => None,
+
+            Alignment::ExcessLeftHead(..) | 
+            Alignment::ExcessLeftTail(..) |
+            Alignment::DisjointLeft(..) => None,
+
+            Alignment::ExcessRightHead(ref a) |
+            Alignment::ExcessRightTail(ref a) |
+            Alignment::DisjointRight(ref a) => Some(a),
+        }
+    }
+
+
+
+
+    pub fn is_left(&self) -> bool {
+        match *self {
+            Alignment::Match(..) => false,
+
+            Alignment::ExcessLeftHead(..) | 
+            Alignment::ExcessLeftTail(..) |
+            Alignment::DisjointLeft(..) => true,
+
+            Alignment::ExcessRightHead(..) |
+            Alignment::ExcessRightTail(..) |
+            Alignment::DisjointRight(..) => false
+        }
+    }
+
+    pub fn is_right(&self) -> bool {
+        match *self {
+            Alignment::Match(..) => false,
+
+            Alignment::ExcessLeftHead(..) | 
+            Alignment::ExcessLeftTail(..) |
+            Alignment::DisjointLeft(..) => false,
+
+            Alignment::ExcessRightHead(..) |
+            Alignment::ExcessRightTail(..) |
+            Alignment::DisjointRight(..) => true
+        }
+    }
+
 
     pub fn is_disjoint_left(&self) -> bool {
         match *self {
@@ -67,9 +129,10 @@ impl<T> Alignment<T> {
 }
 
 /// Align the items of two sorted (unique) iterators.
-pub fn align_sorted_iterators<F, I>(a: I, b: I, mut f: F)
-    where F: FnMut(Alignment<I::Item>),
-          I::Item: Ord + Clone,
+pub fn align_sorted_iterators<CMP, F, I>(a: I, b: I, mut cmp: CMP, mut f: F)
+    where 
+          CMP: Fn(&I::Item, &I::Item) -> Ordering, 
+          F: FnMut(Alignment<I::Item>),
           I: Iterator,
 {
     let mut left_iter = a.peekable();
@@ -90,13 +153,11 @@ pub fn align_sorted_iterators<F, I>(a: I, b: I, mut f: F)
 
         match (left_iter.peek(), right_iter.peek()) {
             (Some(ref l), Some(ref r)) => {
-                if l < r {
-                    take = Take::OneLeft;
-                } else if r < l {
-                    take = Take::OneRight;
-                } else {
-                    take = Take::Both;
-                }
+                take = match cmp(l, r) {
+                    Ordering::Less => Take::OneLeft,
+                    Ordering::Greater => Take::OneRight,
+                    Ordering::Equal => Take::Both,
+                };
             }
             (Some(_), None) => {
                 take = Take::AllLeft;
@@ -136,7 +197,7 @@ pub fn align_sorted_iterators<F, I>(a: I, b: I, mut f: F)
                 // two equal values
                 let left_value = left_iter.next().unwrap();
                 let right_value = right_iter.next().unwrap();
-                debug_assert!(left_value.eq(&right_value));
+                debug_assert!(cmp(&left_value, &right_value) == Ordering::Equal);
 
                 f(Alignment::Match(left_value, right_value));
 
@@ -171,7 +232,7 @@ mod tests {
               I: Iterator,
     {
         let mut c = Vec::new();
-        align_sorted_iterators(a, b, |alignment| c.push(alignment));
+        align_sorted_iterators(a, b, Ord::cmp, |alignment| c.push(alignment));
         c
     }
 
@@ -193,6 +254,7 @@ mod tests {
         let mut r = Vec::new();
         super::align_sorted_iterators(s1.iter().cloned(),
         s2.iter().cloned(),
+        Ord::cmp,
         |alignment| {
             match alignment {
                 Alignment::Match(a, _b) => r.push(a),
