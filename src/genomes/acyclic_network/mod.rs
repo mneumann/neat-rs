@@ -5,6 +5,7 @@ use traits::{Distance, Genotype};
 use weight::Weight;
 use alignment_metric::AlignmentMetric;
 use std::collections::BTreeMap;
+use minmax::MinMax;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct NodeInnovation(Innovation);
@@ -93,8 +94,25 @@ impl<NT: NodeType> Genome<NT> {
     }
 
     /// Determine the link innovation range for that Genome.
-    fn link_innovation_range(&self) -> Option<(Innovation, Innovation)> {
-        None
+    ///
+    /// # Complexity
+    ///
+    /// O(n) where `n` is the number of nodes.
+
+    fn link_innovation_range(&self) -> Option<(LinkInnovation, LinkInnovation)> {
+        let mut minmax = MinMax::new(); 
+
+        let network = &self.network;
+        network.each_node_with_index(|_, node_idx| {
+            if let Some(link) = network.first_link_of_node(node_idx) {
+                minmax.add_value(&link.external_link_id());
+            }
+            if let Some(link) = network.last_link_of_node(node_idx) {
+                minmax.add_value(&link.external_link_id());
+            }
+        });
+
+        minmax.min_max().map(|(i, j)| (LinkInnovation(i), LinkInnovation(j)))
     }
 
     /// Add a link between `source_node` and `target_node`. Associates the new
@@ -204,6 +222,29 @@ mod tests {
 
         genome.add_link(n0, n2, LinkInnovation::new(0), Weight(0.0));
         assert_eq!(2, genome.link_count());
+    }
+
+    #[test]
+    fn test_link_innovation_range() {
+        let mut genome = Genome::<NT>::new();
+        let n0 = NodeInnovation::new(0);
+        let n1 = NodeInnovation::new(1);
+        let n2 = NodeInnovation::new(2);
+
+        genome.add_node(n0, NT); 
+        genome.add_node(n1, NT); 
+        genome.add_node(n2, NT); 
+
+        assert!(genome.link_innovation_range().is_none());
+
+        genome.add_link(n0, n1, LinkInnovation::new(5), Weight(0.0));
+        assert_eq!(Some((LinkInnovation::new(5), LinkInnovation::new(5))), genome.link_innovation_range());
+
+        genome.add_link(n0, n2, LinkInnovation::new(1), Weight(0.0));
+        assert_eq!(Some((LinkInnovation::new(1), LinkInnovation::new(5))), genome.link_innovation_range());
+
+        genome.add_link(n1, n2, LinkInnovation::new(99), Weight(0.0));
+        assert_eq!(Some((LinkInnovation::new(1), LinkInnovation::new(99))), genome.link_innovation_range());
     }
 
     #[test]
