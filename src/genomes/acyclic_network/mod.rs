@@ -97,8 +97,8 @@ impl<NT: NodeType> Genome<NT> {
         node_metric
     }
 
-    /// Counts the number of matching, disjoint and excess link AND node innovation numbers between
-    /// `self` and `right`.
+    /// Determine the genetic compatibility between `self` and `other` in terms of matching,
+    /// disjoint and excess genes (both node and link genes), as well as weight distance.
 
     fn combined_alignment_metric(&self, other: &Self) -> CombinedAlignmentMetric {
         let mut metric = CombinedAlignmentMetric::new();
@@ -214,28 +214,6 @@ impl<NT: NodeType> Genome<NT> {
         });
 
         metric
-    }
-
-    /// Determine the genetic compatibility between `self` and `other` in terms of matching,
-    /// disjoint and excess genes, as well as weight distance.
-    ///
-    /// The first thing which we have to do is to determine the range of innovations of each
-    /// genome, i.e. it's min and max values.
-
-    fn alignment_metric(&self, other: &Self) -> AlignmentMetric {
-        let mut metric = AlignmentMetric::new();
-
-        let left_link_innov_range = self.link_innovation_range();
-        let right_link_innov_range = self.link_innovation_range();
-
-        // let left_node_innov_range = self.node_innovation_range();
-        // let right_node_innov_range = 
-        //let min_node_innovation = self. 
-
-        // ...
-        // 1. Determine the 
-
-        return metric;
     }
 
     /// Determine the genomes range of node innovations. If the genome
