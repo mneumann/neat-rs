@@ -1,5 +1,5 @@
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 /// New type representing an innovation number.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct Innovation(usize);
 
 impl Innovation {

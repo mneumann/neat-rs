@@ -4,6 +4,12 @@ use rand::{Rng, Closed01};
 #[derive(Debug, Clone, Copy)]
 pub struct Weight(pub f64);
 
+impl Into<f64> for Weight {
+    fn into(self) -> f64 {
+        self.0
+    }
+}
+
 /// Represents the range of a connection weight. The range is closed,
 /// i.e. including both endpoints [low, high].
 #[derive(Debug, Clone, Copy)]
