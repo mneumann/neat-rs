@@ -1,5 +1,3 @@
-use std::iter::Peekable;
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum Alignment<T> {
     Match(T, T),
