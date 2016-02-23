@@ -25,6 +25,21 @@ impl Innovation for NodeInnovation {
 impl Innovation for LinkInnovation {
 }
 
+struct CombinedAlignmentMetric {
+    node_metric: AlignmentMetric,
+    link_metric: AlignmentMetric,
+}
+
+impl CombinedAlignmentMetric {
+    fn new() -> Self {
+        CombinedAlignmentMetric {
+            node_metric: AlignmentMetric::new(),
+            link_metric: AlignmentMetric::new(),
+        }
+    }
+}
+
+
 /// Genome representing a feed-forward (acyclic) network.
 ///
 /// Each node is uniquely identified by it's Innovation number. Each link is sorted according it's
@@ -85,15 +100,15 @@ impl<NT: NodeType> Genome<NT> {
     /// Counts the number of matching, disjoint and excess link AND node innovation numbers between
     /// `self` and `right`.
 
-    fn combined_alignment_metric(&self, other: &Self) -> (AlignmentMetric, AlignmentMetric) {
+    fn combined_alignment_metric(&self, other: &Self) -> CombinedAlignmentMetric {
+        let mut metric = CombinedAlignmentMetric::new();
+
         let left = self.node_innovation_map.iter();
         let right = other.node_innovation_map.iter();
 
         let left_link_innov_range = self.link_innovation_range();
         let right_link_innov_range = other.link_innovation_range();
 
-        let mut node_metric = AlignmentMetric::new();
-        let mut link_metric = AlignmentMetric::new();
 
         let left_network = &self.network;
         let right_network = &other.network;
@@ -101,7 +116,7 @@ impl<NT: NodeType> Genome<NT> {
         align_sorted_iterators(left, right, |&(kl, _), &(kr, _)| Ord::cmp(kl, kr), |node_alignment| {
             match node_alignment {
                 Alignment::Match((_, &left_node_index), (_, &right_node_index)) => {
-                    node_metric.matching += 1;
+                    metric.node_metric.matching += 1;
 
                     // Both nodes are topological identical. So the link innovations can
                     // also match up.
@@ -114,28 +129,28 @@ impl<NT: NodeType> Genome<NT> {
 
                                                 if let Alignment::Match((_, left_link), (_, right_link)) = link_alignment {
                                                     // we have a link match!
-                                                    link_metric.matching += 1;
+                                                    metric.link_metric.matching += 1;
 
                                                     // add up the weight distance
-                                                    link_metric.weight_distance += (left_link.weight().0 - right_link.weight().0).abs();
+                                                    metric.link_metric.weight_distance += (left_link.weight().0 - right_link.weight().0).abs();
                                                 } else if link_alignment.is_disjoint() {
                                                     // the link is locally disjoint (list of links of the node) 
-                                                    link_metric.disjoint += 1;
+                                                    metric.link_metric.disjoint += 1;
                                                 } else if link_alignment.is_left() {
                                                     let &(_, left_link) = link_alignment.get_left().unwrap();
 
                                                     if right_link_innov_range.contains(&LinkInnovation(left_link.external_link_id().0)) {
-                                                        link_metric.disjoint += 1;
+                                                        metric.link_metric.disjoint += 1;
                                                     } else {
-                                                        link_metric.excess += 1;
+                                                        metric.link_metric.excess += 1;
                                                     }
                                                 } else if link_alignment.is_right() {
                                                     let &(_, right_link) = link_alignment.get_right().unwrap();
 
                                                     if left_link_innov_range.contains(&LinkInnovation(right_link.external_link_id().0)) {
-                                                        link_metric.disjoint += 1;
+                                                        metric.link_metric.disjoint += 1;
                                                     } else {
-                                                        link_metric.excess += 1;
+                                                        metric.link_metric.excess += 1;
                                                     }
                                                 } else {
                                                     unreachable!();
@@ -152,16 +167,16 @@ impl<NT: NodeType> Genome<NT> {
                     for (_, left_link) in left_network.link_iter_for_node(left_node_index) {
                         // check if link is disjoint or excess
                         if right_link_innov_range.contains(&LinkInnovation(left_link.external_link_id().0)) {
-                            link_metric.disjoint += 1;
+                            metric.link_metric.disjoint += 1;
                         } else {
-                            link_metric.excess += 1;
+                            metric.link_metric.excess += 1;
                         }
                     }
 
                     if align_left.is_excess() {
-                        node_metric.excess += 1;
+                        metric.node_metric.excess += 1;
                     } else if align_left.is_disjoint() {
-                        node_metric.disjoint += 1;
+                        metric.node_metric.disjoint += 1;
                     } else {
                         unreachable!();
                     }
@@ -175,16 +190,16 @@ impl<NT: NodeType> Genome<NT> {
                     for (_, right_link) in right_network.link_iter_for_node(right_node_index) {
                         // check if link is disjoint or excess
                         if left_link_innov_range.contains(&LinkInnovation(right_link.external_link_id().0)) {
-                            link_metric.disjoint += 1;
+                            metric.link_metric.disjoint += 1;
                         } else {
-                            link_metric.excess += 1;
+                            metric.link_metric.excess += 1;
                         }
                     }
 
                     if align_right.is_excess() {
-                        node_metric.excess += 1;
+                        metric.node_metric.excess += 1;
                     } else if align_right.is_disjoint() {
-                        node_metric.disjoint += 1;
+                        metric.node_metric.disjoint += 1;
                     } else {
                         unreachable!();
                     }
@@ -198,7 +213,7 @@ impl<NT: NodeType> Genome<NT> {
             }
         });
 
-        (node_metric, link_metric)
+        metric
     }
 
     /// Determine the genetic compatibility between `self` and `other` in terms of matching,
@@ -482,32 +497,31 @@ mod tests {
         let mut right = Genome::<NT>::new();
 
         assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).0);
+                   left.combined_alignment_metric(&right).node_metric);
 
         left.add_node(NodeInnovation(5), NT);
         assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).0);
+                   left.combined_alignment_metric(&right).node_metric);
 
         left.add_node(NodeInnovation(10), NT);
         assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).0);
+                   left.combined_alignment_metric(&right).node_metric);
 
         right.add_node(NodeInnovation(6), NT);
         assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).0);
+                   left.combined_alignment_metric(&right).node_metric);
 
         right.add_node(NodeInnovation(5), NT);
         assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).0);
+                   left.combined_alignment_metric(&right).node_metric);
 
         left.add_node(NodeInnovation(6), NT);
         assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).0);
+                   left.combined_alignment_metric(&right).node_metric);
 
         right.add_node(NodeInnovation(11), NT);
         assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).0);
-
+                   left.combined_alignment_metric(&right).node_metric);
     }
 
 }
