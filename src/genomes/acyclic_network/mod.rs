@@ -1,5 +1,5 @@
 use innovation::{Innovation, InnovationRange};
-use acyclic_network::{Network, NodeIndex};
+use acyclic_network::{Network, NodeIndex, Link};
 pub use acyclic_network::NodeType;
 use traits::{Distance, Genotype};
 use weight::Weight;
@@ -119,6 +119,79 @@ impl<NT: NodeType> Genome<NT> {
         });
 
         node_metric
+    }
+
+    /// Aligns links of two genomes.
+
+    fn align_links<F>(left_genome: &Self, right_genome: &Self, mut f: F)
+        //where F: FnMut(Alignment<(&Link<Weight,AnyInnovation>, NodeInnovation, NodeInnovation)>)
+        where F: FnMut(Alignment<&Link<Weight,AnyInnovation>>)
+    {
+        let left_nodes = left_genome.node_innovation_map.iter();
+        let right_nodes = right_genome.node_innovation_map.iter();
+
+        let left_link_innov_range = left_genome.link_innovation_range();
+        let right_link_innov_range = right_genome.link_innovation_range();
+
+        let left_network = &left_genome.network;
+        let right_network = &right_genome.network;
+
+        align_sorted_iterators(left_nodes, right_nodes, |&(kl, _), &(kr, _)| Ord::cmp(kl, kr), |node_alignment| {
+            match node_alignment {
+                Alignment::Match((_, &left_node_index), (_, &right_node_index)) => {
+
+                    // Both nodes are topological identical. So the link innovations can
+                    // also match up.
+                    align_sorted_iterators(left_network.link_iter_for_node(left_node_index),
+                                           right_network.link_iter_for_node(right_node_index),
+                                           |&(_, left_link), &(_, right_link)| 
+                                               Ord::cmp(&left_link.external_link_id(),
+                                                        &right_link.external_link_id()),
+                                            |link_alignment| {
+                                                match link_alignment { 
+                                                    Alignment::Match((_, left_link), (_, right_link)) => {
+                                                        f(Alignment::Match(left_link, right_link));
+                                                    }
+                                                    Alignment::Disjoint((_, link), left_or_right) => {
+                                                        f(Alignment::Disjoint(link, left_or_right));
+                                                    }
+                                                    Alignment::Excess((_, left_link), pos @ LeftOrRight::Left) => {
+                                                        if right_link_innov_range.contains(&left_link.external_link_id().into()) {
+                                                             f(Alignment::Disjoint(left_link, pos));
+                                                        } else {
+                                                             f(Alignment::Excess(left_link, pos));
+                                                        }
+                                                    }
+                                                    Alignment::Excess((_, right_link), pos @ LeftOrRight::Right) => {
+                                                        if left_link_innov_range.contains(&right_link.external_link_id().into()) {
+                                                             f(Alignment::Disjoint(right_link, pos));
+                                                        } else {
+                                                             f(Alignment::Excess(right_link, pos));
+                                                        }
+                                                    }
+                                                }
+                                            });
+                }
+
+                // in general, if a node is disjoint (or excess), it's link innovations cannot match up! 
+                // XXX: Optimize: once we hit an excess link id, all remaining ids are excess as well.
+
+                Alignment::Disjoint((_, &node_index), pos) | Alignment::Excess((_, &node_index), pos) => {
+                    let (net, range) = match pos {
+                        LeftOrRight::Left => (left_network, right_link_innov_range),
+                        LeftOrRight::Right => (right_network, left_link_innov_range),
+                    };
+
+                    for (_, link) in net.link_iter_for_node(node_index) {
+                        if range.contains(&link.external_link_id().into()) {
+                            f(Alignment::Disjoint(link, pos));
+                        } else {
+                            f(Alignment::Excess(link, pos));
+                        }
+                    }
+                }
+            }
+        });
     }
 
     /// Determine the genetic compatibility between `left_genome` and `right_genome` in terms of matching,
@@ -325,6 +398,9 @@ impl<NT: NodeType> Genome<NT> {
     fn crossover<R: Rng>(left_genome: &Self, right_genome: &Self, c: &ProbabilisticCrossover, rng: &mut R) -> Self {
         let mut offspring = Genome::new();
 
+        Genome::crossover_nodes(left_genome, right_genome, &mut offspring, c, rng);
+        Genome::crossover_links(left_genome, right_genome, &mut offspring, c, rng);
+
         return offspring;
     }
 
@@ -381,6 +457,48 @@ impl<NT: NodeType> Genome<NT> {
             }
         });
     }
+
+    /// Crossover the links of `left_genome` and `right_genome`.
+
+    fn crossover_links<R: Rng>(left_genome: &Self, right_genome: &Self, offspring: &mut Self, c: &ProbabilisticCrossover, rng: &mut R) {
+
+        let left_network = &left_genome.network;
+        let right_network = &right_genome.network;
+
+        // We first take all matching links from both genomes. We don't have to check for cycles
+        // here, as each of the parents is acyclic and as such, the disjoint set of all links of
+        // both genomes is acyclic as well.
+        Genome::align_links(left_genome, right_genome, |link_alignment| {
+            match link_alignment {
+                Alignment::Match(left_link, right_link) => {
+                    assert!(left_link.external_link_id() == right_link.external_link_id());
+                    // A matching link that exists in both genomes.
+                    // Either take it from left or right.
+                    // Note that offspring already contains both the source and target node
+                    // (assuming crossover_nodes() was called before) as also both of these 
+                    // nodes must exists in both parents.
+                    if c.prob_match_left.flip(rng) {
+                        let source_innov = left_network.node(left_link.source_node_index()).external_node_id();
+                        let target_innov = left_network.node(left_link.target_node_index()).external_node_id();
+
+                        // take link weight from left
+                        // we have to lookup the source and target node innovations of the
+                        // offspring.
+                        //offspring.add_link_with_active(source_innov, target_innov, left_link.weight(), left_link.external_link_id(), left_link.is_active()); 
+                    } else {
+                        // take link weight from right
+                        let source_innov = right_network.node(right_link.source_node_index()).external_node_id();
+                        let target_innov = right_network.node(right_link.target_node_index()).external_node_id();
+                        //offspring.add_link_with_active(source_innov, target_innov, right_link.weight(), right_link.external_link_id(), right_link.is_active()); 
+                    }
+                }
+                _ => {
+                    // ignore
+                }
+            }
+        });
+    }
+
 
 }
 
