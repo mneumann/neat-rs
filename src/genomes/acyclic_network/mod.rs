@@ -11,7 +11,6 @@ use rand::{Rng};
 use crossover::ProbabilisticCrossover;
 use std::convert::Into;
 use std::ops::Range;
-use std::marker::PhantomData;
 use prob::Prob;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -64,6 +63,15 @@ fn count_disjoint_or_excess<I: Innovation>(metric: &mut AlignmentMetric, range: 
     } else {
         metric.excess += 1;
     }
+}
+
+/// This trait is used to specialize link weight creation and node activation function creation.
+
+pub trait ElementStrategy<NT: NodeType>
+{
+    fn link_weight_range() -> WeightRange;
+    fn full_link_weight() -> f64;
+    fn random_node_type<R: Rng>(rng: &mut R) -> NT;
 }
 
 /// GlobalCache trait.
@@ -148,7 +156,7 @@ impl<NT: NodeType> Genome<NT> {
     /// Counts the number of matching, disjoint and excess node innovation numbers between
     /// `left_genome` and `right_genome`.
 
-    fn node_alignment_metric(left_genome: &Self, right_genome: &Self) -> AlignmentMetric {
+    pub fn node_alignment_metric(left_genome: &Self, right_genome: &Self) -> AlignmentMetric {
         let mut node_metric = AlignmentMetric::new();
         node_metric.max_len = cmp::max(left_genome.node_innovation_map.len(), right_genome.node_innovation_map.len());
 
@@ -344,7 +352,7 @@ impl<NT: NodeType> Genome<NT> {
     ///
     /// This runs in O(log n).
 
-    fn node_innovation_range(&self) -> InnovationRange<NodeInnovation> {
+    pub fn node_innovation_range(&self) -> InnovationRange<NodeInnovation> {
         let mut range = InnovationRange::empty();
 
         if let Some(&min) = self.node_innovation_map.keys().min() {
@@ -439,7 +447,7 @@ impl<NT: NodeType> Genome<NT> {
         (!self.network.link_would_cycle(source_node_index, target_node_index))
     }
 
-    fn link_count(&self) -> usize {
+    pub fn link_count(&self) -> usize {
         self.network.link_count()
     }
 
@@ -468,7 +476,7 @@ impl<NT: NodeType> Genome<NT> {
         self.node_innovation_map.contains_key(&node_innovation)
     }
 
-    fn node_count(&self) -> usize {
+    pub fn node_count(&self) -> usize {
         assert!(self.node_innovation_map.len() == self.network.node_count()); 
         return self.node_innovation_map.len();
     }
@@ -796,6 +804,10 @@ impl<NT: NodeType> Genome<NT> {
         return modifications;
     }
 
+    pub fn mutate_delete_link(&mut self) -> bool {
+        unimplemented!();
+    }
+
 }
 
 /// This is used to weight a link AlignmentMetric.
@@ -822,49 +834,6 @@ impl<NT: NodeType> Distance<Genome<NT>> for GenomeDistance {
             0.0
         }
     }
-}
-
-
-/// This trait is used to specialize link weight creation and node activation function creation.
-pub trait ElementStrategy<NT: NodeType>
-{
-    fn link_weight_range() -> WeightRange;
-    fn full_link_weight() -> f64;
-    fn random_node_type<R: Rng>(rng: &mut R) -> NT;
-}
-
-/// A global environment for all genomes. 
-///
-/// For example when creating a new link within a genome, we want
-/// to check if that same link, defined by the node innovations of it's
-/// source and target nodes, has already occured at some other place.
-#[derive(Debug)]
-pub struct Environment<NT, S>
-    where NT: NodeType,
-          S: ElementStrategy<NT>
-{
-    node_innovation_counter: Range<usize>,
-    link_innovation_counter: Range<usize>,
-    // (src_node, target_node) -> link_innovation
-    link_innovation_cache: BTreeMap<(NodeInnovation, NodeInnovation), LinkInnovation>,
-    _marker_s: PhantomData<S>,
-    _marker_nt: PhantomData<NT>,
-}
-
-impl<NT, S> Environment<NT, S>
-    where NT: NodeType,
-          S: ElementStrategy<NT>
-{
-    pub fn new() -> Self {
-        Environment {
-            node_innovation_counter: Range{start: 0, end: usize::max_value()},
-            link_innovation_counter: Range{start: 0, end: usize::max_value()},
-            link_innovation_cache: BTreeMap::new(),
-            _marker_s: PhantomData,
-            _marker_nt: PhantomData,
-        }
-    }
-
 }
 
 #[cfg(test)]
