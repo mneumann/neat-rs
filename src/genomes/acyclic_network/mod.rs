@@ -371,6 +371,23 @@ impl<NT: NodeType> Genome<NT> {
         let _link_index = self.network.add_link_with_active(source_node_index, target_node_index, weight, AnyInnovation(link_innovation.0), active);
     }
 
+    /// Check if the link is valid and if it would construct a cycle.
+    fn valid_link(&self, source_node: NodeInnovation, target_node: NodeInnovation) -> bool {
+        let source_node_index = self.node_innovation_map[&source_node];
+        let target_node_index = self.node_innovation_map[&target_node];
+
+        self.network.valid_link(source_node_index, target_node_index).is_ok()
+    }
+
+    /// Check if the link is valid and if it would construct a cycle.
+    fn valid_link_no_cycle(&self, source_node: NodeInnovation, target_node: NodeInnovation) -> bool {
+        let source_node_index = self.node_innovation_map[&source_node];
+        let target_node_index = self.node_innovation_map[&target_node];
+
+        self.network.valid_link(source_node_index, target_node_index).is_ok() && 
+        (!self.network.link_would_cycle(source_node_index, target_node_index))
+    }
+
     fn link_count(&self) -> usize {
         self.network.link_count()
     }
@@ -389,6 +406,10 @@ impl<NT: NodeType> Genome<NT> {
 
         let node_index = self.network.add_node(node_type, AnyInnovation(node_innovation.0));
         self.node_innovation_map.insert(node_innovation, node_index);
+    }
+
+    pub fn has_node(&self, node_innovation: NodeInnovation) -> bool {
+        self.node_innovation_map.contains_key(&node_innovation)
     }
 
     fn node_count(&self) -> usize {
@@ -464,10 +485,17 @@ impl<NT: NodeType> Genome<NT> {
 
     /// Crossover the links of `left_genome` and `right_genome`.
 
-    fn crossover_links<R: Rng>(left_genome: &Self, right_genome: &Self, offspring: &mut Self, c: &ProbabilisticCrossover, rng: &mut R) {
-        // We first take all matching links from both genomes. We don't have to check for cycles
-        // here, as each of the parents is acyclic and as such, the disjoint set of all links of
+    fn crossover_links<R: Rng>(left_genome: &Self, right_genome: &Self, offspring: &mut Self, c: &ProbabilisticCrossover, rng: &mut R) -> (usize, usize) {
+
+        let mut total_nodes_added = 0;
+        let mut total_links_added = 0;
+
+        // First pass.
+        //
+        // Take all matching links from both genomes. We don't have to check for cycles
+        // here, as each of the parents is acyclic and as such, the intersection of all links from
         // both genomes is acyclic as well.
+
         Genome::align_links(left_genome, right_genome, |link_alignment| {
             match link_alignment {
                 Alignment::Match(left_link_ref, right_link_ref) => {
@@ -490,12 +518,99 @@ impl<NT: NodeType> Genome<NT> {
                                                    link_ref.external_link_id().into(),
                                                    link_ref.link().weight(),
                                                    link_ref.link().is_active());
+
+                    total_links_added += 1;
                 }
                 _ => {
-                    // ignore
+                    // NOTE: ignore all other links for now. In the second pass, we will take
+                    // these into account.
                 }
             }
         });
+
+
+        // Second pass.
+        //
+        // Crossover disjoint and excess links. Two things to consider:
+        //
+        //    * Do not introduce cycles!
+        //    * Nodes might not exist. 
+
+        Genome::align_links(left_genome, right_genome, |link_alignment| {
+            // determine the probability
+            let prob = match link_alignment {
+                    // Ignore matches. We already handled matching links in "Pass 1".
+                    Alignment::Match(_, _) => None,
+                    Alignment::Disjoint(_, LeftOrRight::Left) => Some(c.prob_disjoint_left),
+                    Alignment::Disjoint(_, LeftOrRight::Right) => Some(c.prob_disjoint_right),
+                    Alignment::Excess(_, LeftOrRight::Left) => Some(c.prob_excess_left),
+                    Alignment::Excess(_, LeftOrRight::Right) => Some(c.prob_excess_right),
+            };
+
+            if let Some(prob) = prob {
+                match link_alignment {
+                    Alignment::Match(_, _) => {
+                        // Ignore. We already handled matching links in "Pass 1".
+                    }
+
+                    Alignment::Disjoint(link_ref, _) | Alignment::Excess(link_ref, _) => {
+                        if prob.flip(rng) {
+                            // Add nodes in case they do not exist.
+                            // We take the nodeis from the genome the link belongs to.
+
+                            let mut nodes_added = 0;
+                            let source_id = link_ref.external_source_node_id().into();
+                            let target_id = link_ref.external_target_node_id().into();
+
+                            if !offspring.has_node(source_id) {
+                                // add source node.
+                                offspring.add_node(source_id, link_ref.source_node().node_type().clone());
+                                nodes_added += 1;
+                            }
+
+                            if !offspring.has_node(target_id) {
+                                // add source node.
+                                // We take the node from the genome the link belongs to.
+                                offspring.add_node(target_id, link_ref.target_node().node_type().clone());
+                                nodes_added += 1;
+                            }
+
+                            debug_assert!(offspring.has_node(source_id) && offspring.has_node(target_id));
+
+                            let can_add_link = if nodes_added == 2 {
+                                // Both nodes were added from the same genome as the link origins.
+                                // This means that it is safe to add the link.
+                                true
+                            } else if nodes_added == 1 {
+                                // Only one node was added from the genome.
+                                // We have to check if the link is valid, for example a connection
+                                // to an input node would be invalid. But we cannot introduce a cycle
+                                // here.
+                                offspring.valid_link(source_id, target_id)
+                            } else {
+                                // No node was added. We also have to check for cycles.
+                                debug_assert!(nodes_added == 0);
+                                offspring.valid_link_no_cycle(source_id, target_id)
+                            };
+
+                            total_nodes_added += nodes_added;
+
+                            if can_add_link {
+                                offspring.add_link_with_active(source_id,
+                                                               target_id,
+                                                               link_ref.external_link_id().into(),
+                                                               link_ref.link().weight(),
+                                                               link_ref.link().is_active());
+                                total_links_added += 1;
+                            }
+                        }
+                    }
+                }
+
+            }
+        });
+
+        return (total_nodes_added, total_links_added);
     }
 
 
