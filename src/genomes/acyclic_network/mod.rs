@@ -420,11 +420,11 @@ impl<NT: NodeType> Genome<NT> {
     /// Performs a crossover operation on the two genomes `left_genome` and `right_genome`,
     /// producing a new offspring genome.
 
-    fn crossover<R: Rng>(left_genome: &Self, right_genome: &Self, c: &ProbabilisticCrossover, rng: &mut R) -> Self {
+    pub fn crossover<R: Rng>(left_genome: &Self, right_genome: &Self, c: &ProbabilisticCrossover, rng: &mut R) -> Self {
         let mut offspring = Genome::new();
 
         Genome::crossover_nodes(left_genome, right_genome, &mut offspring, c, rng);
-        Genome::crossover_links(left_genome, right_genome, &mut offspring, c, rng);
+        let (_, _) = Genome::crossover_links(left_genome, right_genome, &mut offspring, c, rng);
 
         return offspring;
     }
