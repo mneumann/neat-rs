@@ -5,8 +5,10 @@ use traits::{Distance, Genotype};
 use weight::Weight;
 use alignment_metric::AlignmentMetric;
 use std::collections::BTreeMap;
-use alignment::{Alignment, align_sorted_iterators};
+use alignment::{Alignment, align_sorted_iterators, LeftOrRight};
 use std::cmp;
+use rand::{Rng};
+use crossover::ProbabilisticCrossover;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AnyInnovation(usize);
@@ -130,90 +132,73 @@ impl<NT: NodeType> Genome<NT> {
                                                Ord::cmp(&left_link.external_link_id(),
                                                         &right_link.external_link_id()),
                                             |link_alignment| {
+                                                match link_alignment { 
+                                                    Alignment::Match((_, left_link), (_, right_link)) => {
+                                                        // we have a link match!
+                                                        metric.link_metric.matching += 1;
 
-                                                if let Alignment::Match((_, left_link), (_, right_link)) = link_alignment {
-                                                    // we have a link match!
-                                                    metric.link_metric.matching += 1;
-
-                                                    // add up the weight distance
-                                                    metric.link_metric.weight_distance += (left_link.weight().0 - right_link.weight().0).abs();
-                                                } else if link_alignment.is_disjoint() {
-                                                    // the link is locally disjoint (list of links of the node) 
-                                                    metric.link_metric.disjoint += 1;
-                                                } else if link_alignment.is_left() {
-                                                    let &(_, left_link) = link_alignment.get_left().unwrap();
-
-                                                    if right_link_innov_range.contains(&LinkInnovation(left_link.external_link_id().0)) {
-                                                        metric.link_metric.disjoint += 1;
-                                                    } else {
-                                                        metric.link_metric.excess += 1;
+                                                        // add up the weight distance
+                                                        metric.link_metric.weight_distance += (left_link.weight().0 - right_link.weight().0).abs();
                                                     }
-                                                } else if link_alignment.is_right() {
-                                                    let &(_, right_link) = link_alignment.get_right().unwrap();
-
-                                                    if left_link_innov_range.contains(&LinkInnovation(right_link.external_link_id().0)) {
+                                                    Alignment::Disjoint(..) => {
+                                                        // the link is locally disjoint (list of links of the node) 
                                                         metric.link_metric.disjoint += 1;
-                                                    } else {
-                                                        metric.link_metric.excess += 1;
                                                     }
-                                                } else {
-                                                    unreachable!();
+                                                    Alignment::Excess((_, left_link), LeftOrRight::Left) => {
+                                                        if right_link_innov_range.contains(&LinkInnovation(left_link.external_link_id().0)) {
+                                                            // local excess can still be globally disjoint 
+                                                            metric.link_metric.disjoint += 1;
+                                                        } else {
+                                                            metric.link_metric.excess += 1;
+                                                        }
+                                                    }
+                                                    Alignment::Excess((_, right_link), LeftOrRight::Right) => {
+                                                        if left_link_innov_range.contains(&LinkInnovation(right_link.external_link_id().0)) {
+                                                            // local excess can still be globally disjoint 
+                                                            metric.link_metric.disjoint += 1;
+                                                        } else {
+                                                            metric.link_metric.excess += 1;
+                                                        }
+                                                    }
                                                 }
                                             });
                 }
 
                 // in general, if a node is disjoint (or excess), it's link innovations cannot match up! 
+                other => {
+                    let (node_index, left_or_right) = match other {
+                        Alignment::Disjoint((_, &node_index), left_or_right) => {
+                            metric.node_metric.disjoint += 1;
+                            (node_index, left_or_right)
+                        }
 
-                ref align_left if align_left.is_left() => {
+                        Alignment::Excess((_, &node_index), left_or_right) => {
+                            metric.node_metric.excess += 1;
+                            (node_index, left_or_right)
+                        }
 
-                    let &(_, &left_node_index) = align_left.get_left().unwrap();
+                        _ => unreachable!()
+                    };
+
+                    let (net, link_innov_range) = match left_or_right {
+                        LeftOrRight::Left => {
+                            (left_network, right_link_innov_range) 
+                        }
+                        LeftOrRight::Right => {
+                            (right_network, left_link_innov_range) 
+                        }
+                    };
+
                     // XXX: Optimize: once we hit an excess link id, all remaining ids are excess as well.
-                    for (_, left_link) in left_network.link_iter_for_node(left_node_index) {
+                    for (_, link) in net.link_iter_for_node(node_index) {
                         // check if link is disjoint or excess
-                        if right_link_innov_range.contains(&LinkInnovation(left_link.external_link_id().0)) {
+                        if link_innov_range.contains(&LinkInnovation(link.external_link_id().0)) {
                             metric.link_metric.disjoint += 1;
                         } else {
                             metric.link_metric.excess += 1;
                         }
                     }
-
-                    if align_left.is_excess() {
-                        metric.node_metric.excess += 1;
-                    } else if align_left.is_disjoint() {
-                        metric.node_metric.disjoint += 1;
-                    } else {
-                        unreachable!();
-                    }
-
                 }
-
-                ref align_right if align_right.is_right() => {
-
-                    let &(_, &right_node_index) = align_right.get_right().unwrap();
-                    // XXX: Optimize: once we hit an excess link id, all remaining ids are excess as well.
-                    for (_, right_link) in right_network.link_iter_for_node(right_node_index) {
-                        // check if link is disjoint or excess
-                        if left_link_innov_range.contains(&LinkInnovation(right_link.external_link_id().0)) {
-                            metric.link_metric.disjoint += 1;
-                        } else {
-                            metric.link_metric.excess += 1;
-                        }
-                    }
-
-                    if align_right.is_excess() {
-                        metric.node_metric.excess += 1;
-                    } else if align_right.is_disjoint() {
-                        metric.node_metric.disjoint += 1;
-                    } else {
-                        unreachable!();
-                    }
-
-                }
-
-                _ => {
-                    unreachable!()
-                }
-
             }
         });
 
@@ -326,7 +311,14 @@ impl<NT: NodeType> Genome<NT> {
         return self.node_innovation_map.len();
     }
 
-    //fn crossover<R: Rng>(
+    /// Performs a crossover operation on the two genomes `left_genome` and `right_genome`,
+    /// producing a new offspring genome.
+
+    fn crossover<R: Rng>(left_genome: &Self, right_genome: &Self, c: &ProbabilisticCrossover, rng: &mut R) -> Self {
+        let mut offspring = Genome::new();
+
+        return offspring;
+    }
 
 
 }
