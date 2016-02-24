@@ -9,13 +9,13 @@ use alignment::{Alignment, align_sorted_iterators};
 use std::cmp;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct AnyInnovation(usize);
+pub struct AnyInnovation(usize);
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct NodeInnovation(usize);
+pub struct NodeInnovation(usize);
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct LinkInnovation(usize);
+pub struct LinkInnovation(usize);
 
 impl Innovation for AnyInnovation {
 }
@@ -72,15 +72,15 @@ impl<NT: NodeType> Genome<NT> {
         }
     }
 
-    /// Counts the number of matching, disjoint and excess node innovation numbers between `self`
-    /// and `other`.
+    /// Counts the number of matching, disjoint and excess node innovation numbers between
+    /// `left_genome` and `right_genome`.
 
-    fn node_alignment_metric(&self, other: &Self) -> AlignmentMetric {
+    fn node_alignment_metric(left_genome: &Self, right_genome: &Self) -> AlignmentMetric {
         let mut node_metric = AlignmentMetric::new();
-        node_metric.max_len = cmp::max(self.node_innovation_map.len(), other.node_innovation_map.len());
+        node_metric.max_len = cmp::max(left_genome.node_innovation_map.len(), right_genome.node_innovation_map.len());
 
-        let left = self.node_innovation_map.keys();
-        let right = other.node_innovation_map.keys();
+        let left = left_genome.node_innovation_map.keys();
+        let right = right_genome.node_innovation_map.keys();
 
         align_sorted_iterators(left, right, Ord::cmp, |alignment| {
             match alignment {
@@ -100,25 +100,24 @@ impl<NT: NodeType> Genome<NT> {
         node_metric
     }
 
-    /// Determine the genetic compatibility between `self` and `other` in terms of matching,
+    /// Determine the genetic compatibility between `left_genome` and `right_genome` in terms of matching,
     /// disjoint and excess genes (both node and link genes), as well as weight distance.
 
-    fn combined_alignment_metric(&self, other: &Self) -> CombinedAlignmentMetric {
+    fn combined_alignment_metric(left_genome: &Self, right_genome: &Self) -> CombinedAlignmentMetric {
         let mut metric = CombinedAlignmentMetric::new();
-        metric.node_metric.max_len = cmp::max(self.network.node_count(), other.network.node_count());
-        metric.link_metric.max_len = cmp::max(self.network.link_count(), other.network.link_count());
+        metric.node_metric.max_len = cmp::max(left_genome.network.node_count(), right_genome.network.node_count());
+        metric.link_metric.max_len = cmp::max(left_genome.network.link_count(), right_genome.network.link_count());
 
-        let left = self.node_innovation_map.iter();
-        let right = other.node_innovation_map.iter();
+        let left_nodes= left_genome.node_innovation_map.iter();
+        let right_nodes= right_genome.node_innovation_map.iter();
 
-        let left_link_innov_range = self.link_innovation_range();
-        let right_link_innov_range = other.link_innovation_range();
+        let left_link_innov_range = left_genome.link_innovation_range();
+        let right_link_innov_range = right_genome.link_innovation_range();
 
+        let left_network = &left_genome.network;
+        let right_network = &right_genome.network;
 
-        let left_network = &self.network;
-        let right_network = &other.network;
-
-        align_sorted_iterators(left, right, |&(kl, _), &(kr, _)| Ord::cmp(kl, kr), |node_alignment| {
+        align_sorted_iterators(left_nodes, right_nodes, |&(kl, _), &(kr, _)| Ord::cmp(kl, kr), |node_alignment| {
             match node_alignment {
                 Alignment::Match((_, &left_node_index), (_, &right_node_index)) => {
                     metric.node_metric.matching += 1;
@@ -326,6 +325,10 @@ impl<NT: NodeType> Genome<NT> {
         assert!(self.node_innovation_map.len() == self.network.node_count()); 
         return self.node_innovation_map.len();
     }
+
+    //fn crossover<R: Rng>(
+
+
 }
 
 /// This is used to weight a link AlignmentMetric.
@@ -337,7 +340,7 @@ pub struct GenomeDistance {
 
 impl<NT: NodeType> Distance<Genome<NT>> for GenomeDistance {
     fn distance(&self, genome_left: &Genome<NT>, genome_right: &Genome<NT>) -> f64 {
-        let m = genome_left.combined_alignment_metric(genome_right).link_metric;
+        let m = Genome::combined_alignment_metric(genome_left, genome_right).link_metric;
 
         if m.max_len == 0 {
             return 0.0;
@@ -457,7 +460,7 @@ mod tests {
         let mut left = Genome::<NT>::new();
         let mut right = Genome::<NT>::new();
 
-        let m = left.node_alignment_metric(&right);
+        let m = Genome::node_alignment_metric(&left, &right);
         assert_eq!(0, m.max_len);
         assert_eq!(0, m.matching);
         assert_eq!(0, m.excess);
@@ -465,7 +468,7 @@ mod tests {
         assert_eq!(0.0, m.weight_distance);
 
         left.add_node(NodeInnovation(5), NT);
-        let m = left.node_alignment_metric(&right);
+        let m = Genome::node_alignment_metric(&left, &right);
         assert_eq!(1, m.max_len);
         assert_eq!(0, m.matching);
         assert_eq!(1, m.excess);
@@ -473,7 +476,7 @@ mod tests {
         assert_eq!(0.0, m.weight_distance);
 
         left.add_node(NodeInnovation(10), NT);
-        let m = left.node_alignment_metric(&right);
+        let m = Genome::node_alignment_metric(&left, &right);
         assert_eq!(2, m.max_len);
         assert_eq!(0, m.matching);
         assert_eq!(2, m.excess);
@@ -481,7 +484,7 @@ mod tests {
         assert_eq!(0.0, m.weight_distance);
 
         right.add_node(NodeInnovation(6), NT);
-        let m = left.node_alignment_metric(&right);
+        let m = Genome::node_alignment_metric(&left, &right);
         assert_eq!(2, m.max_len);
         assert_eq!(0, m.matching);
         assert_eq!(2, m.excess);
@@ -489,7 +492,7 @@ mod tests {
         assert_eq!(0.0, m.weight_distance);
 
         right.add_node(NodeInnovation(5), NT);
-        let m = left.node_alignment_metric(&right);
+        let m = Genome::node_alignment_metric(&left, &right);
         assert_eq!(2, m.max_len);
         assert_eq!(1, m.matching);
         assert_eq!(1, m.excess);
@@ -497,7 +500,7 @@ mod tests {
         assert_eq!(0.0, m.weight_distance);
 
         left.add_node(NodeInnovation(6), NT);
-        let m = left.node_alignment_metric(&right);
+        let m = Genome::node_alignment_metric(&left, &right);
         assert_eq!(3, m.max_len);
         assert_eq!(2, m.matching);
         assert_eq!(1, m.excess);
@@ -505,7 +508,7 @@ mod tests {
         assert_eq!(0.0, m.weight_distance);
 
         right.add_node(NodeInnovation(11), NT);
-        let m = left.node_alignment_metric(&right);
+        let m = Genome::node_alignment_metric(&left, &right);
         assert_eq!(3, m.max_len);
         assert_eq!(2, m.matching);
         assert_eq!(1, m.excess);
@@ -518,32 +521,32 @@ mod tests {
         let mut left = Genome::<NT>::new();
         let mut right = Genome::<NT>::new();
 
-        assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).node_metric);
+        assert_eq!(Genome::node_alignment_metric(&left, &right),
+                   Genome::combined_alignment_metric(&left, &right).node_metric);
 
         left.add_node(NodeInnovation(5), NT);
-        assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).node_metric);
+        assert_eq!(Genome::node_alignment_metric(&left, &right),
+                   Genome::combined_alignment_metric(&left, &right).node_metric);
 
         left.add_node(NodeInnovation(10), NT);
-        assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).node_metric);
+        assert_eq!(Genome::node_alignment_metric(&left, &right),
+                   Genome::combined_alignment_metric(&left, &right).node_metric);
 
         right.add_node(NodeInnovation(6), NT);
-        assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).node_metric);
+        assert_eq!(Genome::node_alignment_metric(&left, &right),
+                   Genome::combined_alignment_metric(&left, &right).node_metric);
 
         right.add_node(NodeInnovation(5), NT);
-        assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).node_metric);
+        assert_eq!(Genome::node_alignment_metric(&left, &right),
+                   Genome::combined_alignment_metric(&left, &right).node_metric);
 
         left.add_node(NodeInnovation(6), NT);
-        assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).node_metric);
+        assert_eq!(Genome::node_alignment_metric(&left, &right),
+                   Genome::combined_alignment_metric(&left, &right).node_metric);
 
         right.add_node(NodeInnovation(11), NT);
-        assert_eq!(left.node_alignment_metric(&right),
-                   left.combined_alignment_metric(&right).node_metric);
+        assert_eq!(Genome::node_alignment_metric(&left, &right),
+                   Genome::combined_alignment_metric(&left, &right).node_metric);
     }
 
 }
