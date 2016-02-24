@@ -2,7 +2,7 @@ use innovation::{Innovation, InnovationRange};
 use acyclic_network::{Network, NodeIndex, LinkRefItem};
 pub use acyclic_network::NodeType;
 use traits::{Distance, Genotype};
-use weight::Weight;
+use weight::{Weight, WeightRange};
 use alignment_metric::AlignmentMetric;
 use std::collections::BTreeMap;
 use alignment::{Alignment, align_sorted_iterators, LeftOrRight};
@@ -10,6 +10,8 @@ use std::cmp;
 use rand::{Rng};
 use crossover::ProbabilisticCrossover;
 use std::convert::Into;
+use std::ops::Range;
+use std::marker::PhantomData;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AnyInnovation(usize);
@@ -61,6 +63,17 @@ fn count_disjoint_or_excess<I: Innovation>(metric: &mut AlignmentMetric, range: 
     } else {
         metric.excess += 1;
     }
+}
+
+/// GlobalCache trait.
+///
+/// For example when creating a new link within a genome, we want
+/// to check if that same link, defined by the node innovations of it's
+/// source and target nodes, has already occured at some other place.
+
+pub trait GlobalCache {
+    fn get_or_create_link_innovation(&mut self, source_node: NodeInnovation, target_node: NodeInnovation) -> LinkInnovation;
+    fn create_node_innovation(&mut self) -> NodeInnovation;
 }
 
 /// Genome representing a feed-forward (acyclic) network.
@@ -392,6 +405,16 @@ impl<NT: NodeType> Genome<NT> {
         self.network.link_count()
     }
 
+    fn _add_node(&mut self, node_innovation: NodeInnovation, node_type: NT) -> NodeIndex {
+        if self.node_innovation_map.contains_key(&node_innovation) {
+            panic!("Duplicate node_innovation");
+        }
+
+        let node_index = self.network.add_node(node_type, AnyInnovation(node_innovation.0));
+        self.node_innovation_map.insert(node_innovation, node_index);
+        return node_index;
+    }
+
     /// Add a new node with external id `node_innovation` and of type `node_type`
     /// to the genome.
     ///
@@ -400,12 +423,7 @@ impl<NT: NodeType> Genome<NT> {
     /// Panics if a node with the same innovation already exists in the genome.
 
     pub fn add_node(&mut self, node_innovation: NodeInnovation, node_type: NT) {
-        if self.node_innovation_map.contains_key(&node_innovation) {
-            panic!("Duplicate node_innovation");
-        }
-
-        let node_index = self.network.add_node(node_type, AnyInnovation(node_innovation.0));
-        self.node_innovation_map.insert(node_innovation, node_index);
+        let _ = self._add_node(node_innovation, node_type);
     }
 
     pub fn has_node(&self, node_innovation: NodeInnovation) -> bool {
@@ -613,6 +631,89 @@ impl<NT: NodeType> Genome<NT> {
         return (total_nodes_added, total_links_added);
     }
 
+    /// Mutate the genome by adding a random connection which is valid and does not introduce a cycle.
+    ///
+    /// Return `true` if the genome was modified. Otherwise `false`.
+
+    pub fn mutate_add_connection<R, G>(&mut self, weight_range: &WeightRange, cache: &mut G, rng: &mut R) -> bool
+        where R: Rng,
+              G: GlobalCache {
+        match self.network.find_random_unconnected_link_no_cycle(rng) {
+            Some((source_node_idx, target_node_idx)) => {
+                let ext_source_node_id: NodeInnovation = self.network.node(source_node_idx).external_node_id().into();
+                let ext_target_node_id: NodeInnovation = self.network.node(target_node_idx).external_node_id().into();
+
+                // Add new link to the offspring genome
+                self.network.add_link(source_node_idx,
+                                      target_node_idx,
+                                      weight_range.random_weight(rng),
+                                      AnyInnovation(cache.get_or_create_link_innovation(ext_source_node_id, ext_target_node_id).0));
+                return true;
+            }
+            None => {
+                return false;
+            }
+        }
+    }
+
+    /// Choose a random link. Split it in half creating a globally new node innovation!
+    /// XXX: activate if link is inactive?
+    /// XXX: random_active_link() is O(n) vs. O(1) for random_link().
+    ///
+    /// Note that the new `node_type` should allow incoming and outgoing links! Otherwise
+    /// this panics!
+
+    pub fn mutate_add_node<R, G>(&mut self,
+                                   node_type: NT,
+                                   second_link_weight: Weight,
+                                   cache: &mut G,
+                                   rng: &mut R)
+                                   -> bool
+                                   where R: Rng, G: GlobalCache {
+        let link_index = match self.network.random_active_link_index(rng) {
+            Some(idx) => idx,
+            None => return false
+        };
+
+        debug_assert!(self.network.link(link_index).is_active());
+
+        // disable the original link gene (`link_index`).
+        //
+        // we keep this gene (but disable it), because this allows us to have a structurally
+        // compatible genome to the original one, as disabled genes are taken into account for
+        // the genomic distance measure.
+        
+        let _ok = self.network.disable_link_index(link_index);
+        assert!(_ok);
+
+        // Create new node innovation and add it to the genome.
+        let new_node_innovation = cache.create_node_innovation();
+        let new_node_index = self._add_node(new_node_innovation, node_type);
+
+        // Add two new links connecting the three nodes. This cannot add a cycle!
+        //
+        // The first link reuses the same weight as the original link.
+        // The second link uses `second_link_weight` as weight.
+        // Ideally this is of full strenght. We want to make the modification
+        // as little as possible.
+
+        let orig_weight = self.network.link(link_index).weight(); 
+        let source_node_index = self.network.link(link_index).source_node_index();
+        let target_node_index = self.network.link(link_index).target_node_index();
+        let source_node_innovation: NodeInnovation = self.network.node(source_node_index).external_node_id().into();
+        let target_node_innovation: NodeInnovation = self.network.node(target_node_index).external_node_id().into();
+
+        self.network.add_link(source_node_index,
+                              new_node_index,
+                              orig_weight,
+                              AnyInnovation(cache.get_or_create_link_innovation(source_node_innovation, new_node_innovation).0));
+
+        self.network.add_link(new_node_index,
+                              target_node_index,
+                              second_link_weight,
+                              AnyInnovation(cache.get_or_create_link_innovation(new_node_innovation, target_node_innovation).0));
+        return true;
+    }
 
 }
 
@@ -640,6 +741,49 @@ impl<NT: NodeType> Distance<Genome<NT>> for GenomeDistance {
             0.0
         }
     }
+}
+
+
+/// This trait is used to specialize link weight creation and node activation function creation.
+pub trait ElementStrategy<NT: NodeType>
+{
+    fn link_weight_range() -> WeightRange;
+    fn full_link_weight() -> f64;
+    fn random_node_type<R: Rng>(rng: &mut R) -> NT;
+}
+
+/// A global environment for all genomes. 
+///
+/// For example when creating a new link within a genome, we want
+/// to check if that same link, defined by the node innovations of it's
+/// source and target nodes, has already occured at some other place.
+#[derive(Debug)]
+pub struct Environment<NT, S>
+    where NT: NodeType,
+          S: ElementStrategy<NT>
+{
+    node_innovation_counter: Range<usize>,
+    link_innovation_counter: Range<usize>,
+    // (src_node, target_node) -> link_innovation
+    link_innovation_cache: BTreeMap<(NodeInnovation, NodeInnovation), LinkInnovation>,
+    _marker_s: PhantomData<S>,
+    _marker_nt: PhantomData<NT>,
+}
+
+impl<NT, S> Environment<NT, S>
+    where NT: NodeType,
+          S: ElementStrategy<NT>
+{
+    pub fn new() -> Self {
+        Environment {
+            node_innovation_counter: Range{start: 0, end: usize::max_value()},
+            link_innovation_counter: Range{start: 0, end: usize::max_value()},
+            link_innovation_cache: BTreeMap::new(),
+            _marker_s: PhantomData,
+            _marker_nt: PhantomData,
+        }
+    }
+
 }
 
 #[cfg(test)]
