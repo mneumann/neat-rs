@@ -264,6 +264,12 @@ impl<NT: NodeType> Genome<NT> {
         range.map(|i| LinkInnovation(i.0))
     }
 
+    /// Returns a reference to the feed forward network.
+
+    pub fn network(&self) -> &Network<NT, Weight, AnyInnovation> {
+        &self.network
+    }
+
     /// Add a link between `source_node` and `target_node`. Associates the new
     /// link with `link_innovation` and gives it `weight`.
     ///
@@ -285,7 +291,7 @@ impl<NT: NodeType> Genome<NT> {
     /// This is because we keep the edges sorted. `n` is the number of nodes, because
     /// we have to lookup the internal node indices from the node innovations.
 
-    fn add_link(&mut self, source_node: NodeInnovation, target_node: NodeInnovation,
+    pub fn add_link(&mut self, source_node: NodeInnovation, target_node: NodeInnovation,
                 link_innovation: LinkInnovation, weight: Weight) {
         let source_node_index = self.node_innovation_map[&source_node];
         let target_node_index = self.node_innovation_map[&target_node];
@@ -307,7 +313,7 @@ impl<NT: NodeType> Genome<NT> {
     ///
     /// Panics if a node with the same innovation already exists in the genome.
 
-    fn add_node(&mut self, node_innovation: NodeInnovation, node_type: NT) {
+    pub fn add_node(&mut self, node_innovation: NodeInnovation, node_type: NT) {
         if self.node_innovation_map.contains_key(&node_innovation) {
             panic!("Duplicate node_innovation");
         }
