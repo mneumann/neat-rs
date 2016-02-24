@@ -6,6 +6,7 @@ use weight::Weight;
 use alignment_metric::AlignmentMetric;
 use std::collections::BTreeMap;
 use alignment::{Alignment, align_sorted_iterators};
+use std::cmp;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct AnyInnovation(usize);
@@ -75,10 +76,12 @@ impl<NT: NodeType> Genome<NT> {
     /// and `other`.
 
     fn node_alignment_metric(&self, other: &Self) -> AlignmentMetric {
+        let mut node_metric = AlignmentMetric::new();
+        node_metric.max_len = cmp::max(self.node_innovation_map.len(), other.node_innovation_map.len());
+
         let left = self.node_innovation_map.keys();
         let right = other.node_innovation_map.keys();
 
-        let mut node_metric = AlignmentMetric::new();
         align_sorted_iterators(left, right, Ord::cmp, |alignment| {
             match alignment {
                 Alignment::Match(_l, _r) => {
@@ -102,6 +105,8 @@ impl<NT: NodeType> Genome<NT> {
 
     fn combined_alignment_metric(&self, other: &Self) -> CombinedAlignmentMetric {
         let mut metric = CombinedAlignmentMetric::new();
+        metric.node_metric.max_len = cmp::max(self.network.node_count(), other.network.node_count());
+        metric.link_metric.max_len = cmp::max(self.network.link_count(), other.network.link_count());
 
         let left = self.node_innovation_map.iter();
         let right = other.node_innovation_map.iter();
@@ -317,6 +322,32 @@ impl<NT: NodeType> Genome<NT> {
     }
 }
 
+/// This is used to weight a link AlignmentMetric.
+pub struct GenomeDistance {
+    pub excess: f64,
+    pub disjoint: f64,
+    pub weight: f64,
+}
+
+impl<NT: NodeType> Distance<Genome<NT>> for GenomeDistance {
+    fn distance(&self, genome_left: &Genome<NT>, genome_right: &Genome<NT>) -> f64 {
+        let m = genome_left.combined_alignment_metric(genome_right).link_metric;
+
+        if m.max_len == 0 {
+            return 0.0;
+        }
+
+        self.excess * (m.excess as f64) / (m.max_len as f64) +
+        self.disjoint * (m.disjoint as f64) / (m.max_len as f64) +
+        self.weight *
+        if m.matching > 0 {
+            m.weight_distance / (m.matching as f64)
+        } else {
+            0.0
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{NodeType, Genome, NodeInnovation, LinkInnovation};
@@ -421,6 +452,7 @@ mod tests {
         let mut right = Genome::<NT>::new();
 
         let m = left.node_alignment_metric(&right);
+        assert_eq!(0, m.max_len);
         assert_eq!(0, m.matching);
         assert_eq!(0, m.excess);
         assert_eq!(0, m.disjoint);
@@ -428,6 +460,7 @@ mod tests {
 
         left.add_node(NodeInnovation(5), NT);
         let m = left.node_alignment_metric(&right);
+        assert_eq!(1, m.max_len);
         assert_eq!(0, m.matching);
         assert_eq!(1, m.excess);
         assert_eq!(0, m.disjoint);
@@ -435,6 +468,7 @@ mod tests {
 
         left.add_node(NodeInnovation(10), NT);
         let m = left.node_alignment_metric(&right);
+        assert_eq!(2, m.max_len);
         assert_eq!(0, m.matching);
         assert_eq!(2, m.excess);
         assert_eq!(0, m.disjoint);
@@ -442,6 +476,7 @@ mod tests {
 
         right.add_node(NodeInnovation(6), NT);
         let m = left.node_alignment_metric(&right);
+        assert_eq!(2, m.max_len);
         assert_eq!(0, m.matching);
         assert_eq!(2, m.excess);
         assert_eq!(1, m.disjoint);
@@ -449,6 +484,7 @@ mod tests {
 
         right.add_node(NodeInnovation(5), NT);
         let m = left.node_alignment_metric(&right);
+        assert_eq!(2, m.max_len);
         assert_eq!(1, m.matching);
         assert_eq!(1, m.excess);
         assert_eq!(1, m.disjoint);
@@ -456,6 +492,7 @@ mod tests {
 
         left.add_node(NodeInnovation(6), NT);
         let m = left.node_alignment_metric(&right);
+        assert_eq!(3, m.max_len);
         assert_eq!(2, m.matching);
         assert_eq!(1, m.excess);
         assert_eq!(0, m.disjoint);
@@ -463,6 +500,7 @@ mod tests {
 
         right.add_node(NodeInnovation(11), NT);
         let m = left.node_alignment_metric(&right);
+        assert_eq!(3, m.max_len);
         assert_eq!(2, m.matching);
         assert_eq!(1, m.excess);
         assert_eq!(1, m.disjoint);
