@@ -76,6 +76,43 @@ pub trait GlobalCache {
     fn create_node_innovation(&mut self) -> NodeInnovation;
 }
 
+pub struct GlobalInnovationCache {
+    node_innovation_counter: Range<usize>,
+    link_innovation_counter: Range<usize>,
+    // (src_node, target_node) -> link_innovation
+    link_innovation_cache: BTreeMap<(NodeInnovation, NodeInnovation), LinkInnovation>,
+}
+
+impl GlobalInnovationCache {
+    pub fn new() -> Self {
+        GlobalInnovationCache {
+            node_innovation_counter: Range{start: 0, end: usize::max_value()},
+            link_innovation_counter: Range{start: 0, end: usize::max_value()},
+            link_innovation_cache: BTreeMap::new(),
+        }
+    }
+}
+
+impl GlobalCache for GlobalInnovationCache {
+
+    // XXX: Use #entry()
+    fn get_or_create_link_innovation(&mut self, source_node: NodeInnovation, target_node: NodeInnovation) -> LinkInnovation {
+        let key = (source_node, target_node);
+        if let Some(&cached_innovation) = self.link_innovation_cache.get(&key) {
+            return cached_innovation;
+        }
+        let new_innovation = LinkInnovation(self.link_innovation_counter.next().unwrap());
+        self.link_innovation_cache.insert(key, new_innovation);
+        new_innovation
+    }
+
+    fn create_node_innovation(&mut self) -> NodeInnovation {
+        NodeInnovation(self.node_innovation_counter.next().unwrap())
+    }
+
+}
+
+
 /// Genome representing a feed-forward (acyclic) network.
 ///
 /// Each node is uniquely identified by it's Innovation number. Each link is sorted according it's
