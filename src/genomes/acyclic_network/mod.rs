@@ -328,6 +328,60 @@ impl<NT: NodeType> Genome<NT> {
         return offspring;
     }
 
+    /// Crossover the nodes of `left_genome` and `right_genome`. So either take a node from the
+    /// left or the right, depending on randomness and `c`.
+
+    fn crossover_nodes<R: Rng>(left_genome: &Self, right_genome: &Self, offspring: &mut Self, c: &ProbabilisticCrossover, rng: &mut R) {
+        let left_nodes = left_genome.node_innovation_map.iter();
+        let right_nodes = right_genome.node_innovation_map.iter();
+
+        let left_network = &left_genome.network;
+        let right_network = &right_genome.network;
+
+        align_sorted_iterators(left_nodes, right_nodes, |&(kl, _), &(kr, _)| Ord::cmp(kl, kr), |node_alignment| {
+            match node_alignment {
+                Alignment::Match((&ni_l, &left_node_index), (&ni_r, &right_node_index)) => {
+                    // Both genomes have the same node gene (node innovation).
+                    // Either take the node type from the left genome or the right.
+
+                    debug_assert!(ni_l == ni_r);
+
+                    if c.prob_match_left.flip(rng) {
+                        // take from left
+                        offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
+                    } else {
+                        // take from right
+                        offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
+                    }
+                }
+
+                Alignment::Disjoint((&ni_l, &left_node_index), LeftOrRight::Left) => {
+                    if c.prob_disjoint_left.flip(rng) {
+                        offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
+                    }
+                }
+
+                Alignment::Disjoint((&ni_r, &right_node_index), LeftOrRight::Right) => {
+                    if c.prob_disjoint_right.flip(rng) {
+                        offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
+                    }
+                }
+
+                Alignment::Excess((&ni_l, &left_node_index), LeftOrRight::Left) => {
+                    if c.prob_excess_left.flip(rng) {
+                        offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
+                    }
+                }
+
+                Alignment::Excess((&ni_r, &right_node_index), LeftOrRight::Right) => {
+                    if c.prob_excess_right.flip(rng) {
+                        offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
+                    }
+                }
+            }
+        });
+    }
+
 }
 
 /// This is used to weight a link AlignmentMetric.
