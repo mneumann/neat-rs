@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum LeftOrRight {
     Left,
     Right,

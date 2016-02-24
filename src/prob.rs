@@ -1,5 +1,6 @@
 use rand::{Rng, Closed01};
 
+#[derive(Debug, Copy, Clone)]
 pub struct Prob(f32);
 
 impl Prob {
