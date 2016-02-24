@@ -1,5 +1,5 @@
 use innovation::{Innovation, InnovationRange};
-use acyclic_network::{Network, NodeIndex, Link};
+use acyclic_network::{Network, NodeIndex, LinkRefItem};
 pub use acyclic_network::NodeType;
 use traits::{Distance, Genotype};
 use weight::Weight;
@@ -124,8 +124,7 @@ impl<NT: NodeType> Genome<NT> {
     /// Aligns links of two genomes.
 
     fn align_links<F>(left_genome: &Self, right_genome: &Self, mut f: F)
-        //where F: FnMut(Alignment<(&Link<Weight,AnyInnovation>, NodeInnovation, NodeInnovation)>)
-        where F: FnMut(Alignment<&Link<Weight,AnyInnovation>>)
+        where F: FnMut(Alignment<LinkRefItem<NT, Weight,AnyInnovation>>)
     {
         let left_nodes = left_genome.node_innovation_map.iter();
         let right_nodes = right_genome.node_innovation_map.iter();
@@ -142,31 +141,31 @@ impl<NT: NodeType> Genome<NT> {
 
                     // Both nodes are topological identical. So the link innovations can
                     // also match up.
-                    align_sorted_iterators(left_network.link_iter_for_node(left_node_index),
-                                           right_network.link_iter_for_node(right_node_index),
-                                           |&(_, left_link), &(_, right_link)| 
-                                               Ord::cmp(&left_link.external_link_id(),
-                                                        &right_link.external_link_id()),
+                    align_sorted_iterators(left_network.link_ref_iter_for_node(left_node_index),
+                                           right_network.link_ref_iter_for_node(right_node_index),
+                                           |left_link_ref, right_link_ref| 
+                                               Ord::cmp(&left_link_ref.external_link_id(),
+                                                        &right_link_ref.external_link_id()),
                                             |link_alignment| {
                                                 match link_alignment { 
-                                                    Alignment::Match((_, left_link), (_, right_link)) => {
-                                                        f(Alignment::Match(left_link, right_link));
+                                                    Alignment::Match(left_link_ref, right_link_ref) => {
+                                                        f(Alignment::Match(left_link_ref, right_link_ref));
                                                     }
-                                                    Alignment::Disjoint((_, link), left_or_right) => {
-                                                        f(Alignment::Disjoint(link, left_or_right));
+                                                    Alignment::Disjoint(link_ref, left_or_right) => {
+                                                        f(Alignment::Disjoint(link_ref, left_or_right));
                                                     }
-                                                    Alignment::Excess((_, left_link), pos @ LeftOrRight::Left) => {
-                                                        if right_link_innov_range.contains(&left_link.external_link_id().into()) {
-                                                             f(Alignment::Disjoint(left_link, pos));
+                                                    Alignment::Excess(left_link_ref, pos @ LeftOrRight::Left) => {
+                                                        if right_link_innov_range.contains(&left_link_ref.external_link_id().into()) {
+                                                             f(Alignment::Disjoint(left_link_ref, pos));
                                                         } else {
-                                                             f(Alignment::Excess(left_link, pos));
+                                                             f(Alignment::Excess(left_link_ref, pos));
                                                         }
                                                     }
-                                                    Alignment::Excess((_, right_link), pos @ LeftOrRight::Right) => {
-                                                        if left_link_innov_range.contains(&right_link.external_link_id().into()) {
-                                                             f(Alignment::Disjoint(right_link, pos));
+                                                    Alignment::Excess(right_link_ref, pos @ LeftOrRight::Right) => {
+                                                        if left_link_innov_range.contains(&right_link_ref.external_link_id().into()) {
+                                                             f(Alignment::Disjoint(right_link_ref, pos));
                                                         } else {
-                                                             f(Alignment::Excess(right_link, pos));
+                                                             f(Alignment::Excess(right_link_ref, pos));
                                                         }
                                                     }
                                                 }
@@ -182,11 +181,11 @@ impl<NT: NodeType> Genome<NT> {
                         LeftOrRight::Right => (right_network, left_link_innov_range),
                     };
 
-                    for (_, link) in net.link_iter_for_node(node_index) {
-                        if range.contains(&link.external_link_id().into()) {
-                            f(Alignment::Disjoint(link, pos));
+                    for link_ref in net.link_ref_iter_for_node(node_index) {
+                        if range.contains(&link_ref.external_link_id().into()) {
+                            f(Alignment::Disjoint(link_ref, pos));
                         } else {
-                            f(Alignment::Excess(link, pos));
+                            f(Alignment::Excess(link_ref, pos));
                         }
                     }
                 }
@@ -358,13 +357,18 @@ impl<NT: NodeType> Genome<NT> {
 
     pub fn add_link(&mut self, source_node: NodeInnovation, target_node: NodeInnovation,
                 link_innovation: LinkInnovation, weight: Weight) {
+        self.add_link_with_active(source_node, target_node, link_innovation, weight, true);
+    }
+
+    pub fn add_link_with_active(&mut self, source_node: NodeInnovation, target_node: NodeInnovation,
+                link_innovation: LinkInnovation, weight: Weight, active: bool) {
         let source_node_index = self.node_innovation_map[&source_node];
         let target_node_index = self.node_innovation_map[&target_node];
 
         debug_assert!(!self.network.link_would_cycle(source_node_index, target_node_index));
         debug_assert!(self.network.valid_link(source_node_index, target_node_index).is_ok());
 
-        let _link_index = self.network.add_link(source_node_index, target_node_index, weight, AnyInnovation(link_innovation.0));
+        let _link_index = self.network.add_link_with_active(source_node_index, target_node_index, weight, AnyInnovation(link_innovation.0), active);
     }
 
     fn link_count(&self) -> usize {
@@ -461,36 +465,31 @@ impl<NT: NodeType> Genome<NT> {
     /// Crossover the links of `left_genome` and `right_genome`.
 
     fn crossover_links<R: Rng>(left_genome: &Self, right_genome: &Self, offspring: &mut Self, c: &ProbabilisticCrossover, rng: &mut R) {
-
-        let left_network = &left_genome.network;
-        let right_network = &right_genome.network;
-
         // We first take all matching links from both genomes. We don't have to check for cycles
         // here, as each of the parents is acyclic and as such, the disjoint set of all links of
         // both genomes is acyclic as well.
         Genome::align_links(left_genome, right_genome, |link_alignment| {
             match link_alignment {
-                Alignment::Match(left_link, right_link) => {
-                    assert!(left_link.external_link_id() == right_link.external_link_id());
+                Alignment::Match(left_link_ref, right_link_ref) => {
+                    assert!(left_link_ref.external_link_id() == right_link_ref.external_link_id());
                     // A matching link that exists in both genomes.
                     // Either take it from left or right.
                     // Note that offspring already contains both the source and target node
                     // (assuming crossover_nodes() was called before) as also both of these 
                     // nodes must exists in both parents.
-                    if c.prob_match_left.flip(rng) {
-                        let source_innov = left_network.node(left_link.source_node_index()).external_node_id();
-                        let target_innov = left_network.node(left_link.target_node_index()).external_node_id();
-
+                    let link_ref = if c.prob_match_left.flip(rng) {
                         // take link weight from left
-                        // we have to lookup the source and target node innovations of the
-                        // offspring.
-                        //offspring.add_link_with_active(source_innov, target_innov, left_link.weight(), left_link.external_link_id(), left_link.is_active()); 
+                        left_link_ref
                     } else {
                         // take link weight from right
-                        let source_innov = right_network.node(right_link.source_node_index()).external_node_id();
-                        let target_innov = right_network.node(right_link.target_node_index()).external_node_id();
-                        //offspring.add_link_with_active(source_innov, target_innov, right_link.weight(), right_link.external_link_id(), right_link.is_active()); 
-                    }
+                        right_link_ref
+                    };
+
+                    offspring.add_link_with_active(link_ref.external_source_node_id().into(),
+                                                   link_ref.external_target_node_id().into(),
+                                                   link_ref.external_link_id().into(),
+                                                   link_ref.link().weight(),
+                                                   link_ref.link().is_active());
                 }
                 _ => {
                     // ignore
