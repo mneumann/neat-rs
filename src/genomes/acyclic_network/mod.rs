@@ -2,7 +2,7 @@ use innovation::{Innovation, InnovationRange};
 use acyclic_network::{Network, NodeIndex, LinkRefItem};
 pub use acyclic_network::NodeType;
 use traits::{Distance, Genotype};
-use weight::{Weight, WeightRange};
+use weight::{Weight, WeightRange, WeightPerturbanceMethod};
 use alignment_metric::AlignmentMetric;
 use std::collections::BTreeMap;
 use alignment::{Alignment, align_sorted_iterators, LeftOrRight};
@@ -12,6 +12,7 @@ use crossover::ProbabilisticCrossover;
 use std::convert::Into;
 use std::ops::Range;
 use std::marker::PhantomData;
+use prob::Prob;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AnyInnovation(usize);
@@ -750,6 +751,49 @@ impl<NT: NodeType> Genome<NT> {
                               second_link_weight,
                               AnyInnovation(cache.get_or_create_link_innovation(new_node_innovation, target_node_innovation).0));
         return true;
+    }
+
+
+    /// Uniformly modify the weight of link genes, each with a probability of `mutate_prob`. It is
+    /// guaranteed that this method makes a modification to at least one link (if it contains a
+    /// link!).
+    ///
+    /// Returns the number of modifications
+    ///
+    /// XXX: Should we only modify active link genes?
+
+    pub fn mutate_link_weights_uniformly<R: Rng>(&mut self,
+                                                 mutate_prob: Prob,
+                                                 weight_perturbance: &WeightPerturbanceMethod,
+                                                 weight_range: &WeightRange,
+                                                 rng: &mut R) -> usize {
+
+        // Our network does not contain any links. Abort.
+        if self.network.link_count() == 0 {
+            return 0;
+        }
+
+        let mut modifications = 0;
+
+        self.network.each_link_mut(|link| {
+            if mutate_prob.flip(rng) {
+                let new_weight = weight_perturbance.perturb(link.weight(), weight_range, rng);
+                link.set_weight(new_weight);
+                modifications += 1;
+            }
+        });
+
+        if modifications == 0 {
+            // Make at least one change to a randomly selected link.
+            let link_idx = self.network.random_link_index(rng).unwrap();
+            let link = self.network.link_mut(link_idx);
+            let new_weight = weight_perturbance.perturb(link.weight(), weight_range, rng);
+            link.set_weight(new_weight);
+            modifications += 1;
+        }
+
+        assert!(modifications > 0);
+        return modifications;
     }
 
 }
