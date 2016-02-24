@@ -1,14 +1,16 @@
 use std::cmp::Ordering;
 
 #[derive(Debug, PartialEq, Eq)]
+pub enum LeftOrRight {
+    Left,
+    Right,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Alignment<T> {
     Match(T, T),
-    ExcessLeftHead(T),
-    ExcessRightHead(T),
-    ExcessLeftTail(T),
-    ExcessRightTail(T),
-    DisjointLeft(T),
-    DisjointRight(T),
+    Excess(T, LeftOrRight),
+    Disjoint(T, LeftOrRight),
 }
 
 impl<T> Alignment<T> {
@@ -21,115 +23,73 @@ impl<T> Alignment<T> {
 
     pub fn get_left(&self) -> Option<&T> {
         match *self {
-            Alignment::Match(..) => None,
-
-            Alignment::ExcessLeftHead(ref a) | 
-            Alignment::ExcessLeftTail(ref a) |
-            Alignment::DisjointLeft(ref a) => Some(a),
-
-            Alignment::ExcessRightHead(..) |
-            Alignment::ExcessRightTail(..) |
-            Alignment::DisjointRight(..) => None,
+            Alignment::Excess(ref a, LeftOrRight::Left) => Some(a),
+            Alignment::Disjoint(ref a, LeftOrRight::Left) => Some(a),
+            _ => None,
         }
     }
 
     pub fn get_right(&self) -> Option<&T> {
         match *self {
-            Alignment::Match(..) => None,
-
-            Alignment::ExcessLeftHead(..) | 
-            Alignment::ExcessLeftTail(..) |
-            Alignment::DisjointLeft(..) => None,
-
-            Alignment::ExcessRightHead(ref a) |
-            Alignment::ExcessRightTail(ref a) |
-            Alignment::DisjointRight(ref a) => Some(a),
+            Alignment::Excess(ref a, LeftOrRight::Right) => Some(a),
+            Alignment::Disjoint(ref a, LeftOrRight::Right) => Some(a),
+            _ => None,
         }
     }
 
-
-
-
     pub fn is_left(&self) -> bool {
-        match *self {
-            Alignment::Match(..) => false,
-
-            Alignment::ExcessLeftHead(..) | 
-            Alignment::ExcessLeftTail(..) |
-            Alignment::DisjointLeft(..) => true,
-
-            Alignment::ExcessRightHead(..) |
-            Alignment::ExcessRightTail(..) |
-            Alignment::DisjointRight(..) => false
-        }
+        self.get_left().is_some()
     }
 
     pub fn is_right(&self) -> bool {
-        match *self {
-            Alignment::Match(..) => false,
-
-            Alignment::ExcessLeftHead(..) | 
-            Alignment::ExcessLeftTail(..) |
-            Alignment::DisjointLeft(..) => false,
-
-            Alignment::ExcessRightHead(..) |
-            Alignment::ExcessRightTail(..) |
-            Alignment::DisjointRight(..) => true
-        }
+        self.get_right().is_some()
     }
-
 
     pub fn is_disjoint_left(&self) -> bool {
         match *self {
-            Alignment::DisjointLeft(..) => true,
+            Alignment::Disjoint(_, LeftOrRight::Left) => true,
             _ => false,
         }
     }
 
     pub fn is_disjoint_right(&self) -> bool {
         match *self {
-            Alignment::DisjointRight(..) => true,
+            Alignment::Disjoint(_, LeftOrRight::Right) => true,
             _ => false,
         }
     }
 
     pub fn is_disjoint(&self) -> bool {
         match *self {
-            Alignment::DisjointLeft(..) |
-            Alignment::DisjointRight(..) => true,
+            Alignment::Disjoint(..) => true,
             _ => false,
         }
     }
 
     pub fn is_excess_left(&self) -> bool {
         match *self {
-            Alignment::ExcessLeftHead(..) |
-            Alignment::ExcessLeftTail(..) => true,
+            Alignment::Excess(_, LeftOrRight::Left) => true,
             _ => false,
         }
     }
 
     pub fn is_excess_right(&self) -> bool {
         match *self {
-            Alignment::ExcessRightHead(..) |
-            Alignment::ExcessRightTail(..) => true,
+            Alignment::Excess(_, LeftOrRight::Right) => true,
             _ => false,
         }
     }
 
     pub fn is_excess(&self) -> bool {
         match *self {
-            Alignment::ExcessLeftHead(..) |
-            Alignment::ExcessLeftTail(..) |
-            Alignment::ExcessRightHead(..) |
-            Alignment::ExcessRightTail(..) => true,
+            Alignment::Excess(..) => true,
             _ => false,
         }
     }
 }
 
 /// Align the items of two sorted (unique) iterators.
-pub fn align_sorted_iterators<CMP, F, I>(a: I, b: I, mut cmp: CMP, mut f: F)
+pub fn align_sorted_iterators<CMP, F, I>(a: I, b: I, cmp: CMP, mut f: F)
     where 
           CMP: Fn(&I::Item, &I::Item) -> Ordering, 
           F: FnMut(Alignment<I::Item>),
@@ -175,9 +135,10 @@ pub fn align_sorted_iterators<CMP, F, I>(a: I, b: I, mut cmp: CMP, mut f: F)
                 let value = left_iter.next().unwrap();
 
                 if right_count == 0 {
-                    f(Alignment::ExcessLeftHead(value));
+                    // left head
+                    f(Alignment::Excess(value, LeftOrRight::Left));
                 } else {
-                    f(Alignment::DisjointLeft(value));
+                    f(Alignment::Disjoint(value, LeftOrRight::Left));
                 }
 
                 left_count += 1;
@@ -186,9 +147,10 @@ pub fn align_sorted_iterators<CMP, F, I>(a: I, b: I, mut cmp: CMP, mut f: F)
                 let value = right_iter.next().unwrap();
 
                 if left_count == 0 {
-                    f(Alignment::ExcessRightHead(value));
+                    // right head
+                    f(Alignment::Excess(value, LeftOrRight::Right));
                 } else {
-                    f(Alignment::DisjointRight(value));
+                    f(Alignment::Disjoint(value, LeftOrRight::Right));
                 }
 
                 right_count += 1;
@@ -207,14 +169,15 @@ pub fn align_sorted_iterators<CMP, F, I>(a: I, b: I, mut cmp: CMP, mut f: F)
             Take::AllLeft => {
                 // There are no items left on the right side, so all items are ExcessLeftTail.
                 for item in left_iter {
-                    f(Alignment::ExcessLeftTail(item));
+                    // left tail
+                    f(Alignment::Excess(item, LeftOrRight::Left));
                 }
                 break;
             }
             Take::AllRight => {
                 // There are no items left on the right side, so all items are ExcessRightTail.
                 for item in right_iter {
-                    f(Alignment::ExcessRightTail(item));
+                    f(Alignment::Excess(item, LeftOrRight::Right));
                 }
                 break;
             }
@@ -225,7 +188,7 @@ pub fn align_sorted_iterators<CMP, F, I>(a: I, b: I, mut cmp: CMP, mut f: F)
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
-    use super::{Alignment, align_sorted_iterators};
+    use super::{Alignment, align_sorted_iterators, LeftOrRight};
 
     fn align_as_vec<I>(a: I, b: I) -> Vec<Alignment<I::Item>>
         where I::Item: Ord + Clone,
@@ -258,12 +221,8 @@ mod tests {
         |alignment| {
             match alignment {
                 Alignment::Match(a, _b) => r.push(a),
-                Alignment::ExcessLeftHead(a) |
-                    Alignment::ExcessRightHead(a) |
-                    Alignment::ExcessLeftTail(a) |
-                    Alignment::ExcessRightTail(a) |
-                    Alignment::DisjointLeft(a) |
-                    Alignment::DisjointRight(a) => r.push(a),
+                Alignment::Excess(a, _) => r.push(a),
+                Alignment::Disjoint(a, _) => r.push(a),
             }
         });
 
@@ -288,11 +247,11 @@ mod tests {
 
         let c = align_as_vec(left.iter().cloned(), right.iter().cloned());
         assert_eq!(6, c.len());
-        assert_eq!(Alignment::ExcessLeftHead(40), c[0]);
-        assert_eq!(Alignment::DisjointRight(45), c[1]);
-        assert_eq!(Alignment::DisjointLeft(46), c[2]);
+        assert_eq!(Alignment::Excess(40, LeftOrRight::Left), c[0]);
+        assert_eq!(Alignment::Disjoint(45, LeftOrRight::Right), c[1]);
+        assert_eq!(Alignment::Disjoint(46, LeftOrRight::Left), c[2]);
         assert_eq!(Alignment::Match(50, 50), c[3]);
-        assert_eq!(Alignment::ExcessRightTail(51), c[4]);
-        assert_eq!(Alignment::ExcessRightTail(52), c[5]);
+        assert_eq!(Alignment::Excess(51, LeftOrRight::Right), c[4]);
+        assert_eq!(Alignment::Excess(52, LeftOrRight::Right), c[5]);
     }
 }
