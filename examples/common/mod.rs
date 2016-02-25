@@ -47,7 +47,7 @@ pub fn default_mutate_weights() -> MutateMethodWeighting {
         w_modify_weight: 100,
         w_add_node: 1,
         w_add_connection: 10,
-        w_delete_connection: 0,
+        w_delete_connection: 1,
     }
 }
 
@@ -117,13 +117,13 @@ impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
                     let link_weight = self.element_strategy.link_weight_range().random_weight(rng);
                     let _modified = offspring.mutate_add_link(link_weight, self.global_cache, rng);
                 }
+                MutateMethod::DeleteConnection => {
+                    let _modified = offspring.mutate_delete_link(rng);
+                }
                 MutateMethod::AddNode => {
                     let second_link_weight = self.element_strategy.full_link_weight();
                     let node_type = self.element_strategy.random_node_type(rng);
                     let _modified = offspring.mutate_add_node(node_type, second_link_weight, self.global_cache, rng);
-                }
-                MutateMethod::DeleteConnection => {
-                    unimplemented!();
                 }
             }
 

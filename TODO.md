@@ -2,7 +2,7 @@
       gene list and the network representation in sync. This will simply
       the code a lot.
 - [x] Implement the mutation of weights.
-- [ ] Add DeleteConnection structural mutation
+- [x] Add DeleteConnection structural mutation
 - [ ] Include node gene compatibility into the overall compatibility measure
       for speciation.
 - [ ] Think about using a mutation method based on the crossover of matching

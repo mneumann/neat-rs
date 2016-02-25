@@ -815,8 +815,20 @@ impl<NT: NodeType> Genome<NT> {
         return modifications;
     }
 
-    pub fn mutate_delete_link(&mut self) -> bool {
-        unimplemented!();
+    /// Mutate the genome by removing a random link.
+    ///
+    /// Return `true` if the genome was modified. Otherwise `false`.
+
+    pub fn mutate_delete_link<R: Rng>(&mut self, rng: &mut R) -> bool {
+        match self.network.random_link_index(rng) {
+            Some(idx) => {
+                self.network.remove_link_at(idx);
+                true
+            }
+            None => {
+                false
+            }
+        }
     }
 
 }
