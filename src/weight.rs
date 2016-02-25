@@ -10,6 +10,12 @@ impl Into<f64> for Weight {
     }
 }
 
+impl Into<f32> for Weight {
+    fn into(self) -> f32 {
+        self.0 as f32
+    }
+}
+
 /// Represents the range of a connection weight. The range is closed,
 /// i.e. including both endpoints [low, high].
 #[derive(Debug, Clone, Copy)]
@@ -25,6 +31,14 @@ impl WeightRange {
             high: high,
             low: low,
         }
+    }
+
+    pub fn high(&self) -> Weight {
+        Weight(self.high)
+    }
+
+    pub fn low(&self) -> Weight {
+        Weight(self.low)
     }
 
     pub fn unipolar(magnitude: f64) -> WeightRange {

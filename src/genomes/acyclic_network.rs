@@ -65,15 +65,6 @@ fn count_disjoint_or_excess<I: Innovation>(metric: &mut AlignmentMetric, range: 
     }
 }
 
-/// This trait is used to specialize link weight creation and node activation function creation.
-
-pub trait ElementStrategy<NT: NodeType>
-{
-    fn link_weight_range() -> WeightRange;
-    fn full_link_weight() -> f64;
-    fn random_node_type<R: Rng>(rng: &mut R) -> NT;
-}
-
 /// GlobalCache trait.
 ///
 /// For example when creating a new link within a genome, we want
@@ -146,11 +137,31 @@ pub struct Genome<NT: NodeType> {
 impl<NT: NodeType> Genotype for Genome<NT> {}
 
 impl<NT: NodeType> Genome<NT> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Genome {
             network: Network::new(),
             node_innovation_map: BTreeMap::new(),
         }
+    }
+
+    pub fn visit_nodes<F>(&self, mut f: F)
+        where F: FnMut(NodeInnovation, NT)
+    {
+        for node in self.network.nodes() {
+            f(node.external_node_id().into(), node.node_type().clone());
+        }
+    }
+
+    pub fn visit_active_links<F>(&self, mut f: F)
+        where F: FnMut(NodeInnovation, NodeInnovation, Weight)
+    {
+        self.network.each_link_ref(|link_ref| {
+            if link_ref.link().is_active() {
+                f(link_ref.external_source_node_id().into(),
+                  link_ref.external_target_node_id().into(),
+                  link_ref.link().weight());
+            }
+        });
     }
 
     /// Counts the number of matching, disjoint and excess node innovation numbers between
@@ -677,11 +688,11 @@ impl<NT: NodeType> Genome<NT> {
         return (total_nodes_added, total_links_added);
     }
 
-    /// Mutate the genome by adding a random connection which is valid and does not introduce a cycle.
+    /// Mutate the genome by adding a random link which is valid and does not introduce a cycle.
     ///
     /// Return `true` if the genome was modified. Otherwise `false`.
 
-    pub fn mutate_add_connection<R, G>(&mut self, weight_range: &WeightRange, cache: &mut G, rng: &mut R) -> bool
+    pub fn mutate_add_link<R, G>(&mut self, link_weight: Weight, cache: &mut G, rng: &mut R) -> bool
         where R: Rng,
               G: GlobalCache {
         match self.network.find_random_unconnected_link_no_cycle(rng) {
@@ -692,7 +703,7 @@ impl<NT: NodeType> Genome<NT> {
                 // Add new link to the offspring genome
                 self.network.add_link(source_node_idx,
                                       target_node_idx,
-                                      weight_range.random_weight(rng),
+                                      link_weight,
                                       AnyInnovation(cache.get_or_create_link_innovation(ext_source_node_id, ext_target_node_id).0));
                 return true;
             }
@@ -773,7 +784,7 @@ impl<NT: NodeType> Genome<NT> {
     pub fn mutate_link_weights_uniformly<R: Rng>(&mut self,
                                                  mutate_prob: Prob,
                                                  weight_perturbance: &WeightPerturbanceMethod,
-                                                 weight_range: &WeightRange,
+                                                 link_weight_range: &WeightRange,
                                                  rng: &mut R) -> usize {
 
         // Our network does not contain any links. Abort.
@@ -785,7 +796,7 @@ impl<NT: NodeType> Genome<NT> {
 
         self.network.each_link_mut(|link| {
             if mutate_prob.flip(rng) {
-                let new_weight = weight_perturbance.perturb(link.weight(), weight_range, rng);
+                let new_weight = weight_perturbance.perturb(link.weight(), link_weight_range, rng);
                 link.set_weight(new_weight);
                 modifications += 1;
             }
@@ -795,7 +806,7 @@ impl<NT: NodeType> Genome<NT> {
             // Make at least one change to a randomly selected link.
             let link_idx = self.network.random_link_index(rng).unwrap();
             let link = self.network.link_mut(link_idx);
-            let new_weight = weight_perturbance.perturb(link.weight(), weight_range, rng);
+            let new_weight = weight_perturbance.perturb(link.weight(), link_weight_range, rng);
             link.set_weight(new_weight);
             modifications += 1;
         }

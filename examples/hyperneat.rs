@@ -9,20 +9,21 @@ extern crate cppn;
 mod common;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{Genome, Environment, ElementStrategy};
+use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache};
 use neat::fitness::Fitness;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str};
-use cppn::cppn::{Cppn, CppnNodeType};
+use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy};
+use cppn::cppn::{Cppn, CppnNode};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
 use cppn::position::Position2d;
-use neat::weight::WeightRange;
+use neat::weight::{Weight, WeightRange};
+use neat::prob::Prob;
 
-type Node = CppnNodeType<BipolarActivationFunction>;
+type Node = CppnNode<BipolarActivationFunction>;
 
 #[derive(Debug)]
 struct FitnessEvaluator {
@@ -65,22 +66,22 @@ impl FitnessEvaluator {
 struct ES;
 
 impl ElementStrategy<Node> for ES {
-    fn link_weight_range() -> WeightRange {
+    fn link_weight_range(&self) -> WeightRange {
         WeightRange::bipolar(1.0)
     }
 
-    fn full_link_weight() -> f64 {
-        1.0
+    fn full_link_weight(&self) -> Weight {
+        WeightRange::bipolar(1.0).high()
     }
 
-    fn random_node_type<R: Rng>(rng: &mut R) -> Node {
+    fn random_node_type<R: Rng>(&self, rng: &mut R) -> Node {
         let af = &[BipolarActivationFunction::Identity,
                    BipolarActivationFunction::Linear,
                    BipolarActivationFunction::Gaussian,
                    BipolarActivationFunction::Sigmoid,
                    BipolarActivationFunction::Sine];
 
-        CppnNodeType::Hidden(*rng.choose(af).unwrap())
+        CppnNode::Hidden(*rng.choose(af).unwrap())
     }
 }
 
@@ -95,22 +96,24 @@ fn main() {
 
     println!("{:?}", fitness_evaluator);
 
+    let mut cache = GlobalInnovationCache::new();
+
+
     // start with minimal random topology.
-    let mut env: Environment<Node, ES> = Environment::new();
 
     let template_genome = {
         let mut genome = Genome::new();
 
         // 4 inputs (x1,y1,x2,y2)
         for _ in 0..4 {
-            env.add_node_to_genome(&mut genome, CppnNodeType::Input);
+            genome.add_node(cache.create_node_innovation(), CppnNode::Input);
         }
 
         // 1 output (y)
-        env.add_node_to_genome(&mut genome, CppnNodeType::Output);
+        genome.add_node(cache.create_node_innovation(), CppnNode::Output);
 
         // 1 bias node
-        env.add_node_to_genome(&mut genome, CppnNodeType::Bias);
+        genome.add_node(cache.create_node_innovation(), CppnNode::Bias);
 
         genome
     };
@@ -125,10 +128,12 @@ fn main() {
     assert!(initial_pop.len() == POP_SIZE);
 
     let mut mater = Mater {
-        p_crossover: Closed01(0.5),
+        p_crossover: Prob::new(0.5),
         p_crossover_detail: common::default_probabilistic_crossover(),
         mutate_weights: common::default_mutate_weights(),
-        env: &mut env,
+        global_cache: &mut cache,
+        element_strategy: &ES,
+        _n: PhantomData,
     };
 
     let mut runner = Runner {

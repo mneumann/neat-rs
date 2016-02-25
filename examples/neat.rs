@@ -8,29 +8,26 @@ extern crate petgraph;
 mod common;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{Genome, Environment, ElementStrategy};
+use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache};
 use neat::fitness::Fitness;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use neat::gene::Gene;
-use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str};
-use neat::weight::WeightRange;
+use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy};
+use neat::weight::{Weight, WeightRange};
+use neat::prob::Prob;
 
 fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
     let mut builder = GraphBuilder::new();
 
-    genome.visit_node_genes(|node_gene| {
+    genome.visit_nodes(|ext_id, node_type| {
         // make sure the node exists, even if there are no connection to it.
-        let _ = builder.add_node(node_gene.innovation().get(), node_gene.node_type);
+        let _ = builder.add_node(ext_id, node_type);
     });
 
-    genome.visit_active_link_genes(|link_gene| {
-        builder.add_edge(link_gene.source_node_gene.get(),
-                         link_gene.target_node_gene.get(),
-                         closed01::Closed01::new(link_gene.weight as f32));
-
+    genome.visit_active_links(|src_id, target_id, weight| {
+        builder.add_edge(src_id, target_id, closed01::Closed01::new(weight.into()));
     });
 
     return builder.graph();
@@ -55,16 +52,15 @@ impl FitnessEvaluator {
 struct ES;
 
 impl ElementStrategy<Neuron> for ES {
-    fn link_weight_range() -> WeightRange {
-        WeightRange::bipolar(1.0)
+    fn link_weight_range(&self) -> WeightRange {
+        WeightRange::unipolar(1.0)
     }
 
-    // XXX: link_weight_range().high?
-    fn full_link_weight() -> f64 {
-        1.0
+    fn full_link_weight(&self) -> Weight {
+        WeightRange::unipolar(1.0).high()
     }
 
-    fn random_node_type<R: Rng>(_rng: &mut R) -> Neuron {
+    fn random_node_type<R: Rng>(&self, _rng: &mut R) -> Neuron {
         Neuron::Hidden
     }
 }
@@ -72,7 +68,6 @@ impl ElementStrategy<Neuron> for ES {
 const POP_SIZE: usize = 100;
 const INPUTS: usize = 2;
 const OUTPUTS: usize = 3;
-
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -83,9 +78,10 @@ fn main() {
 
     println!("{:?}", fitness_evaluator);
 
-    // start with minimal random topology.
-    let mut env: Environment<Neuron, ES> = Environment::new();
+    let mut cache = GlobalInnovationCache::new();
 
+    // start with minimal random topology.
+    //
     // Generates a template Genome with `n_inputs` input nodes and `n_outputs` output nodes.
     // The genome will not have any link nodes.
 
@@ -94,10 +90,10 @@ fn main() {
         assert!(INPUTS > 0 && OUTPUTS > 0);
 
         for _ in 0..INPUTS {
-            env.add_node_to_genome(&mut genome, Neuron::Input);
+            genome.add_node(cache.create_node_innovation(), Neuron::Input);
         }
         for _ in 0..OUTPUTS {
-            env.add_node_to_genome(&mut genome, Neuron::Output);
+            genome.add_node(cache.create_node_innovation(), Neuron::Output);
         }
         genome
     };
@@ -111,11 +107,14 @@ fn main() {
     }
     assert!(initial_pop.len() == POP_SIZE);
 
+
     let mut mater = Mater {
-        p_crossover: Closed01(0.5),
+        p_crossover: Prob::new(0.5),
         p_crossover_detail: common::default_probabilistic_crossover(),
         mutate_weights: common::default_mutate_weights(),
-        env: &mut env,
+        global_cache: &mut cache,
+        element_strategy: &ES,
+        _n: PhantomData,
     };
 
     let mut runner = Runner {
