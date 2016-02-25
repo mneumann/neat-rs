@@ -16,14 +16,26 @@ pub struct Individual<T: Debug + Genotype> {
     genome: Box<T>,
 }
 
+impl<T: Debug + Genotype> Individual<T> {
+    pub fn fitness(&self) -> Fitness {
+        self.fitness
+    }
+
+    pub fn genome(&self) -> &T {
+        &self.genome
+    }
+}
+
 pub trait Rating {}
-#[derive(Debug)]
-pub struct Rated;
+
 #[derive(Debug)]
 pub struct Unrated;
 
-impl Rating for Rated {}
+#[derive(Debug)]
+pub struct Rated;
+
 impl Rating for Unrated {}
+impl Rating for Rated {}
 
 #[derive(Debug)]
 pub struct Population<T: Genotype + Debug, R: Rating> {
@@ -93,6 +105,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     }
 
     // Return true if genome at position `i` is fitter that `j`
+    // XXX: If population is sorted, we only have to check the indices!
     fn is_fitter(&self, i: usize, j: usize) -> bool {
         self.individuals[i].fitness > self.individuals[j].fitness
     }
@@ -104,6 +117,10 @@ impl<T: Genotype + Debug> Population<T, Rated> {
 
     pub fn max_fitness(&self) -> Option<Fitness> {
         self.individuals.iter().max_by_key(|ind| ind.fitness).map(|i| i.fitness)
+    }
+
+    pub fn best_individual(&self) -> Option<&Individual<T>> {
+        self.individuals.iter().max_by_key(|ind| ind.fitness)
     }
 
     // higher value of fitness means that the individual is fitter.
@@ -201,12 +218,16 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                 while n > 0 {
                     let (parent1, parent2) =
                         selection::tournament_selection_fast2(rng,
+                                                              // XXX: in a sorted niche, the
+                                                              // individuals with the lower index
+                                                              // has better fitness.
                                                               &|i, j| sorted_niche.is_fitter(i, j),
                                                               select_size,
                                                               cmp::min(select_size, tournament_k),
                                                               3);
 
                     // `mate` assumes that the left parent performs better.
+                    // XXX: `is_fitter` same as above.
                     let (left, right) = if sorted_niche.is_fitter(parent1, parent2) {
                         (parent1, parent2)
                     } else {
