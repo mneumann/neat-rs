@@ -106,9 +106,9 @@ impl<T: Genotype + Debug> Population<T, Rated> {
 
     // Return true if genome at position `i` is fitter that `j`
     // XXX: If population is sorted, we only have to check the indices!
-    fn is_fitter(&self, i: usize, j: usize) -> bool {
-        self.individuals[i].fitness > self.individuals[j].fitness
-    }
+    //fn is_fitter(&self, i: usize, j: usize) -> bool {
+    //    self.individuals[i].fitness > self.individuals[j].fitness
+    //}
 
     fn mean_fitness(&self) -> Fitness {
         let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness).sum();
@@ -218,17 +218,16 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                 while n > 0 {
                     let (parent1, parent2) =
                         selection::tournament_selection_fast2(rng,
-                                                              // XXX: in a sorted niche, the
-                                                              // individuals with the lower index
-                                                              // has better fitness.
-                                                              &|i, j| sorted_niche.is_fitter(i, j),
+                                                              // in a sorted niche, the individual with the lower index
+                                                              // has a better fitness.
+                                                              &|i, j| i < j,
                                                               select_size,
                                                               cmp::min(select_size, tournament_k),
                                                               3);
 
                     // `mate` assumes that the left parent performs better.
-                    // XXX: `is_fitter` same as above.
-                    let (left, right) = if sorted_niche.is_fitter(parent1, parent2) {
+                    // In a sorted niche, the individual with lower index has better fitness.
+                    let (left, right) = if parent1 < parent2 {
                         (parent1, parent2)
                     } else {
                         (parent2, parent1)
