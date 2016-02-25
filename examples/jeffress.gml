@@ -11,5 +11,5 @@ graph
   edge [source 0 target 4]
   edge [source 1 target 2]
   edge [source 1 target 3]
-  edge [source 1 target 4]
+  edge [source 1 target 4 weight 0.5]
 ]

@@ -37,6 +37,7 @@ fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
 #[derive(Debug)]
 struct FitnessEvaluator {
     target_graph: OwnedGraph<Neuron>,
+    edge_score: bool,
 }
 
 impl FitnessEvaluator {
@@ -45,7 +46,12 @@ impl FitnessEvaluator {
         let graph = genome_to_graph(genome);
         let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
         s.iterate(50, 0.01);
-        s.score_optimal_sum_norm(None, ScoreNorm::MaxDegree).get()
+        let assignment = s.optimal_node_assignment();
+        if self.edge_score {
+            s.score_outgoing_edge_weights_sum_norm(&assignment, ScoreNorm::MaxDegree).get()
+        } else {
+            s.score_optimal_sum_norm(Some(&assignment), ScoreNorm::MaxDegree).get()
+        }
     }
 }
 
@@ -74,9 +80,8 @@ fn main() {
 
     let fitness_evaluator = FitnessEvaluator {
         target_graph: load_graph("examples/jeffress.gml", convert_neuron_from_str),
+        edge_score: true,
     };
-
-    println!("{:?}", fitness_evaluator);
 
     let mut cache = GlobalInnovationCache::new();
 
@@ -98,15 +103,12 @@ fn main() {
         genome
     };
 
-    println!("{:#?}", template_genome);
-
     let mut initial_pop = Population::<_, Unrated>::new();
 
     for _ in 0..POP_SIZE {
         initial_pop.add_genome(Box::new(template_genome.clone()));
     }
     assert!(initial_pop.len() == POP_SIZE);
-
 
     let mut mater = Mater {
         p_crossover: Prob::new(0.5),
@@ -135,8 +137,8 @@ fn main() {
                                      },
                                      &mut rng);
 
-    let new_pop = new_pop.sort();
+    //let new_pop = new_pop.sort();
 
     println!("iter: {}", iter);
-    println!("{:#?}", new_pop);
+    println!("{:#?}", new_pop.best_individual());
 }
