@@ -133,7 +133,7 @@ fn main() {
 
     let (iter, new_pop) = runner.run(initial_pop,
                                      &|iter, pop| {
-                                         iter >= 100 || pop.max_fitness().unwrap().get() > 0.99
+                                         iter >= 100 || pop.best_individual().unwrap().fitness().get() > 0.99
                                      },
                                      &mut rng);
 

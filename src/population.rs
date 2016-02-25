@@ -26,7 +26,10 @@ impl<T: Debug + Genotype> Individual<T> {
     }
 }
 
-pub trait Rating {}
+pub trait Rating { }
+
+pub trait IsRated : Rating { }
+pub trait IsRatedSorted : IsRated { }
 
 #[derive(Debug)]
 pub struct Unrated;
@@ -34,8 +37,16 @@ pub struct Unrated;
 #[derive(Debug)]
 pub struct Rated;
 
-impl Rating for Unrated {}
-impl Rating for Rated {}
+#[derive(Debug)]
+pub struct RatedSorted;
+
+impl Rating for Unrated { }
+impl Rating for Rated { }
+impl Rating for RatedSorted { }
+
+impl IsRated for Rated { }
+impl IsRated for RatedSorted { }
+impl IsRatedSorted for RatedSorted { }
 
 #[derive(Debug)]
 pub struct Population<T: Genotype + Debug, R: Rating> {
@@ -99,40 +110,60 @@ impl<T: Genotype + Debug> Population<T, Unrated> {
     }
 }
 
+impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
+    fn mean_fitness(&self) -> Fitness {
+        let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness).sum();
+        sum / Fitness::new(self.len() as f64)
+    }
+}
+
+impl<T: Genotype + Debug> Population<T, RatedSorted> {
+    pub fn best_individual(&self) -> Option<&Individual<T>> {
+        self.individuals.first()
+    }
+
+    // Return true if genome at position `i` is fitter that `j`
+    //
+    // In a sorted population, the individual with the lower index
+    // has a better fitness.
+
+    #[inline]
+    fn is_fitter(&self, i: usize, j: usize) -> bool {
+        i < j
+    }
+}
+
 impl<T: Genotype + Debug> Population<T, Rated> {
     pub fn add_individual(&mut self, ind: Individual<T>) {
         self.individuals.push(ind);
     }
 
     // Return true if genome at position `i` is fitter that `j`
-    // XXX: If population is sorted, we only have to check the indices!
     //fn is_fitter(&self, i: usize, j: usize) -> bool {
     //    self.individuals[i].fitness > self.individuals[j].fitness
     //}
 
-    fn mean_fitness(&self) -> Fitness {
-        let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness).sum();
-        sum / Fitness::new(self.len() as f64)
-    }
-
-    pub fn max_fitness(&self) -> Option<Fitness> {
-        self.individuals.iter().max_by_key(|ind| ind.fitness).map(|i| i.fitness)
+    // higher value of fitness means that the individual is fitter.
+    pub fn sort(mut self) -> Population<T, RatedSorted> {
+        (&mut self.individuals).sort_by(|a, b| a.fitness.cmp(&b.fitness).reverse());
+        Population {
+            individuals: self.individuals,
+            _marker: PhantomData,
+        }
     }
 
     pub fn best_individual(&self) -> Option<&Individual<T>> {
         self.individuals.iter().max_by_key(|ind| ind.fitness)
     }
 
-    // higher value of fitness means that the individual is fitter.
-    pub fn sort(mut self) -> Self {
-        (&mut self.individuals).sort_by(|a, b| a.fitness.cmp(&b.fitness).reverse());
-        self
+    /// Merge `self` with the first `n` individuals from population `other`.
+    pub fn merge(&mut self, other: Population<T, RatedSorted>, n: usize) {
+        self.individuals.extend(other.individuals.into_iter().take(n));
     }
 
-    /// Merge `self` with the first `n` individuals from population `other`.
-    pub fn merge(&mut self, other: Population<T, Rated>, n: Option<usize>) {
-        let len = other.individuals.len();
-        self.individuals.extend(other.individuals.into_iter().take(n.unwrap_or(len)));
+    /// Append all individuals of population `other`.
+    pub fn append<X: IsRated>(&mut self, other: Population<T, X>) {
+        self.individuals.extend(other.individuals.into_iter());
     }
 
     // We want to create a population of approximately `pop_size`. We do not care if there are
@@ -218,16 +249,13 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                 while n > 0 {
                     let (parent1, parent2) =
                         selection::tournament_selection_fast2(rng,
-                                                              // in a sorted niche, the individual with the lower index
-                                                              // has a better fitness.
-                                                              &|i, j| i < j,
+                                                              &|i, j| sorted_niche.is_fitter(i, j),
                                                               select_size,
                                                               cmp::min(select_size, tournament_k),
                                                               3);
 
                     // `mate` assumes that the left parent performs better.
-                    // In a sorted niche, the individual with lower index has better fitness.
-                    let (left, right) = if parent1 < parent2 {
+                    let (left, right) = if sorted_niche.is_fitter(parent1, parent2) {
                         (parent1, parent2)
                     } else {
                         (parent2, parent1)
@@ -242,9 +270,8 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             }
 
             // now copy the elites
-            new_rated_population.merge(sorted_niche, Some(elite_size));
+            new_rated_population.merge(sorted_niche, elite_size);
         }
-
 
         return (new_rated_population, new_unrated_population);
     }
@@ -336,7 +363,7 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
                                                     rng);
 
             current_rated_pop = new_rated;
-            current_rated_pop.merge(new_unrated.rate_par(self.fitness), None);
+            current_rated_pop.append(new_unrated.rate_par(self.fitness));
             iteration += 1;
         }
 
