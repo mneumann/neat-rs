@@ -83,6 +83,8 @@ pub struct Mater<'a, N, S, C>
     // probability for crossover. P_mutate = 1.0 - p_crossover
     pub p_crossover: Prob,
     pub p_crossover_detail: ProbabilisticCrossover,
+    pub p_mutate_element: Prob,
+    pub weight_perturbance: WeightPerturbanceMethod,
     pub mutate_weights: MutateMethodWeighting,
     pub global_cache: &'a mut C,
     pub element_strategy: &'a S, 
@@ -112,8 +114,8 @@ impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
             match mutate_method {
                 MutateMethod::ModifyWeight => {
                     let _modifications = offspring.mutate_link_weights_uniformly(
-                        Prob::new(0.01),
-                        &WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.2)},
+                        self.p_mutate_element,
+                        &self.weight_perturbance,
                         &self.element_strategy.link_weight_range(), rng);
                 }
                 MutateMethod::AddConnection => {

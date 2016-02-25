@@ -15,7 +15,7 @@ use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
 use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy};
-use neat::weight::{Weight, WeightRange};
+use neat::weight::{Weight, WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 
 fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
@@ -113,6 +113,8 @@ fn main() {
     let mut mater = Mater {
         p_crossover: Prob::new(0.5),
         p_crossover_detail: common::default_probabilistic_crossover(),
+        p_mutate_element: Prob::new(0.01), // 1% mutation rate per link
+        weight_perturbance: WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.2)},
         mutate_weights: common::default_mutate_weights(),
         global_cache: &mut cache,
         element_strategy: &ES,

@@ -20,7 +20,7 @@ use cppn::cppn::{Cppn, CppnNode};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
 use cppn::position::Position2d;
-use neat::weight::{Weight, WeightRange};
+use neat::weight::{Weight, WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 
 type Node = CppnNode<BipolarActivationFunction>;
@@ -130,6 +130,8 @@ fn main() {
     let mut mater = Mater {
         p_crossover: Prob::new(0.5),
         p_crossover_detail: common::default_probabilistic_crossover(),
+        p_mutate_element: Prob::new(0.05), // 5% mutation rate per link
+        weight_perturbance: WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.2)},
         mutate_weights: common::default_mutate_weights(),
         global_cache: &mut cache,
         element_strategy: &ES,
