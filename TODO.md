@@ -1,3 +1,5 @@
+- [ ] Automatic selection of a good `compatibility_threshold` by sampling
+      the population. Split into `n` niches.
 - [ ] Use configuration file for most parameter settings.
 - [x] Use a single representation instead of trying to keep the node/link
       gene list and the network representation in sync. This will simply
