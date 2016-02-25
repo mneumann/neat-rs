@@ -64,10 +64,13 @@ pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGrap
     };
 
     let graph = parse_gml(&graph_s,
-                          &|sexp| -> Option<N> {
-                              sexp.and_then(|se| se.get_str().map(|s| convert_node_from_str(s)))
+                          &|node_sexp| -> Option<N> {
+                              node_sexp.and_then(|se| se.get_str().map(|s| convert_node_from_str(s)))
                           },
-                          &|_| -> Option<()> { Some(()) })
+                          &|edge_sexp| -> Option<closed01::Closed01<f32>> {
+                              edge_sexp.and_then(|se| se.get_float().map(|s| closed01::Closed01::new(s as f32))).
+                                  or(Some(closed01::Closed01::zero()))
+                          })
                     .unwrap();
     OwnedGraph::from_petgraph(&graph)
 }
