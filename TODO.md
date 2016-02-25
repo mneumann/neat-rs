@@ -1,7 +1,7 @@
-- [ ] Use a single representation instead of trying to keep the node/link
+- [x] Use a single representation instead of trying to keep the node/link
       gene list and the network representation in sync. This will simply
       the code a lot.
-- [ ] Implement the mutation of weights.
+- [x] Implement the mutation of weights.
 - [ ] Add DeleteConnection structural mutation
 - [ ] Include node gene compatibility into the overall compatibility measure
       for speciation.
