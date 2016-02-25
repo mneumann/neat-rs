@@ -114,7 +114,7 @@ fn main() {
         p_crossover: Prob::new(0.5),
         p_crossover_detail: common::default_probabilistic_crossover(),
         p_mutate_element: Prob::new(0.01), // 1% mutation rate per link
-        weight_perturbance: WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.2)},
+        weight_perturbance: WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.1)},
         mutate_weights: common::default_mutate_weights(),
         global_cache: &mut cache,
         element_strategy: &ES,
@@ -138,8 +138,6 @@ fn main() {
                                          iter >= 100 || pop.best_individual().unwrap().fitness().get() > 0.99
                                      },
                                      &mut rng);
-
-    //let new_pop = new_pop.sort();
 
     println!("iter: {}", iter);
     println!("{:#?}", new_pop.best_individual());

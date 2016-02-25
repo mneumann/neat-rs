@@ -94,8 +94,6 @@ fn main() {
         target_graph: load_graph("examples/jeffress.gml", convert_neuron_from_str),
     };
 
-    println!("{:?}", fitness_evaluator);
-
     let mut cache = GlobalInnovationCache::new();
 
 
@@ -118,8 +116,6 @@ fn main() {
         genome
     };
 
-    println!("{:#?}", template_genome);
-
     let mut initial_pop = Population::<_, Unrated>::new();
 
     for _ in 0..POP_SIZE {
@@ -130,7 +126,7 @@ fn main() {
     let mut mater = Mater {
         p_crossover: Prob::new(0.5),
         p_crossover_detail: common::default_probabilistic_crossover(),
-        p_mutate_element: Prob::new(0.05), // 5% mutation rate per link
+        p_mutate_element: Prob::new(0.01), // 1% mutation rate per link
         weight_perturbance: WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.2)},
         mutate_weights: common::default_mutate_weights(),
         global_cache: &mut cache,
@@ -156,8 +152,6 @@ fn main() {
                                      },
                                      &mut rng);
 
-    let new_pop = new_pop.sort();
-
     println!("iter: {}", iter);
-    println!("{:#?}", new_pop);
+    println!("{:#?}", new_pop.best_individual());
 }
