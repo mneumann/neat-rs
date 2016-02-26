@@ -15,7 +15,7 @@ use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy};
+use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy, net_file};
 use cppn::cppn::{Cppn, CppnNode};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
@@ -90,8 +90,11 @@ const POP_SIZE: usize = 100;
 fn main() {
     let mut rng = rand::thread_rng();
 
+    let net = net_file();
+    println!("Using net: {}", net);
+
     let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph("examples/jeffress.gml", convert_neuron_from_str),
+        target_graph: load_graph(&net, convert_neuron_from_str),
     };
 
     let mut cache = GlobalInnovationCache::new();

@@ -14,7 +14,7 @@ use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy};
+use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy, net_file};
 use neat::weight::{Weight, WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 
@@ -78,8 +78,11 @@ const OUTPUTS: usize = 3;
 fn main() {
     let mut rng = rand::thread_rng();
 
+    let net = net_file();
+    println!("Using net: {}", net);
+
     let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph("examples/jeffress.gml", convert_neuron_from_str),
+        target_graph: load_graph(&net, convert_neuron_from_str),
         edge_score: true,
     };
 

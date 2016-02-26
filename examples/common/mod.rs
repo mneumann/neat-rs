@@ -13,6 +13,11 @@ use closed01;
 use neat::weight::{Weight, WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 use std::marker::PhantomData;
+use std::env;
+
+pub fn net_file() -> String {
+    env::args().nth(1).unwrap().to_owned()
+}
 
 /// This trait is used to specialize link weight creation and node activation function creation.
 
