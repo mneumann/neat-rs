@@ -65,7 +65,9 @@ impl ElementStrategy<Neuron> for ES {
 fn main() {
     let mut rng = rand::thread_rng();
     
-    let cfg = config::Configuration::new();
+    let cfg = config::Configuration::from_str("edge_score false");
+
+    println!("{:?}", cfg);
 
     let target_graph = load_graph(&cfg.target_graph_file(), convert_neuron_from_str);
     let (n_inputs, n_outputs) = common::determine_inputs_and_outputs(&target_graph);

@@ -6,13 +6,20 @@ use neat::prob::Prob;
 use neat::genomes::acyclic_network::GenomeDistance;
 use rand::Closed01;
 use asexp::Sexp;
+use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub struct Configuration {
-    edge_score: bool
+    population_size: usize,
+    edge_score: bool,
+
+    w_modify_weight: u32,
+    w_add_node: u32,
+    w_add_connection: u32,
+    w_delete_connection: u32,
 }
 
-fn parse_bool(s: &str) -> bool {
+fn conv_bool(s: &str) -> bool {
     match s {
         "true" => true,
         "false" => false,
@@ -20,10 +27,31 @@ fn parse_bool(s: &str) -> bool {
     }
 }
 
+fn parse_bool(map: &BTreeMap<String, Sexp>, key: &str) -> Option<bool> {
+    if map.contains_key(key) {
+        Some(conv_bool(map[key].get_str().unwrap()))
+    } else {
+        None
+    }
+}
+
+fn parse_uint(map: &BTreeMap<String, Sexp>, key: &str) -> Option<u64> {
+    if map.contains_key(key) {
+        Some(map[key].get_uint().unwrap())
+    } else {
+        None
+    }
+}
+
 impl Configuration {
     pub fn new() -> Self {
         Configuration {
-            edge_score: true
+            edge_score: false,
+            population_size: 100,
+            w_modify_weight: 100,
+            w_add_node: 1,
+            w_add_connection: 10,
+            w_delete_connection: 1,
         }
     }
 
@@ -36,9 +64,17 @@ impl Configuration {
     pub fn from_str(s: &str) -> Self {
         let expr = Sexp::parse_toplevel(s).unwrap();
         let map = expr.into_map().unwrap();
-        Configuration {
-            edge_score: parse_bool(map["edge_score"].get_str().unwrap())
-        }
+        let mut cfg = Configuration::new();
+
+        if let Some(val) = parse_bool(&map, "edge_score") { cfg.edge_score = val; }
+        if let Some(val) = parse_uint(&map, "population_size") { cfg.population_size = val as usize; }
+
+        if let Some(val) = parse_uint(&map, "w_modify_weight") { cfg.w_modify_weight = val as u32; }
+        if let Some(val) = parse_uint(&map, "w_add_node") { cfg.w_add_node = val as u32; }
+        if let Some(val) = parse_uint(&map, "w_add_connection") { cfg.w_add_connection = val as u32; }
+        if let Some(val) = parse_uint(&map, "w_delete_connection") { cfg.w_delete_connection = val as u32; }
+
+        cfg
     }
 
     pub fn p_crossover(&self) -> Prob {
@@ -87,7 +123,7 @@ impl Configuration {
     }
 
     pub fn population_size(&self) -> usize {
-        100
+        self.population_size
     }
 
     pub fn target_graph_file(&self) -> String {
@@ -113,12 +149,11 @@ impl Configuration {
     }
 
     pub fn mutate_weights(&self) -> MutateMethodWeighting {
-        // XXX:
         MutateMethodWeighting {
-            w_modify_weight: 100,
-            w_add_node: 1,
-            w_add_connection: 10,
-            w_delete_connection: 1,
+            w_modify_weight: self.w_modify_weight,
+            w_add_node: self.w_add_node,
+            w_add_connection: self.w_add_connection,
+            w_delete_connection: self.w_delete_connection,
         }
     }
 }
