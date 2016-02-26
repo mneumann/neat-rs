@@ -7,7 +7,7 @@ use alignment_metric::AlignmentMetric;
 use std::collections::BTreeMap;
 use alignment::{Alignment, align_sorted_iterators, LeftOrRight};
 use std::cmp;
-use rand::{Rng};
+use rand::Rng;
 use crossover::ProbabilisticCrossover;
 use std::convert::Into;
 use std::ops::Range;
@@ -39,11 +39,9 @@ impl Into<LinkInnovation> for AnyInnovation {
     }
 }
 
-impl Innovation for NodeInnovation {
-}
+impl Innovation for NodeInnovation {}
 
-impl Innovation for LinkInnovation {
-}
+impl Innovation for LinkInnovation {}
 
 struct CombinedAlignmentMetric {
     node_metric: AlignmentMetric,
@@ -60,7 +58,9 @@ impl CombinedAlignmentMetric {
 }
 
 #[inline]
-fn count_disjoint_or_excess<I: Innovation>(metric: &mut AlignmentMetric, range: &InnovationRange<I>, innovation: I) {
+fn count_disjoint_or_excess<I: Innovation>(metric: &mut AlignmentMetric,
+                                           range: &InnovationRange<I>,
+                                           innovation: I) {
     if range.contains(&innovation) {
         metric.disjoint += 1;
     } else {
@@ -75,7 +75,10 @@ fn count_disjoint_or_excess<I: Innovation>(metric: &mut AlignmentMetric, range: 
 /// source and target nodes, has already occured at some other place.
 
 pub trait GlobalCache {
-    fn get_or_create_link_innovation(&mut self, source_node: NodeInnovation, target_node: NodeInnovation) -> LinkInnovation;
+    fn get_or_create_link_innovation(&mut self,
+                                     source_node: NodeInnovation,
+                                     target_node: NodeInnovation)
+                                     -> LinkInnovation;
     fn create_node_innovation(&mut self) -> NodeInnovation;
 }
 
@@ -89,17 +92,25 @@ pub struct GlobalInnovationCache {
 impl GlobalInnovationCache {
     pub fn new() -> Self {
         GlobalInnovationCache {
-            node_innovation_counter: Range{start: 0, end: usize::max_value()},
-            link_innovation_counter: Range{start: 0, end: usize::max_value()},
+            node_innovation_counter: Range {
+                start: 0,
+                end: usize::max_value(),
+            },
+            link_innovation_counter: Range {
+                start: 0,
+                end: usize::max_value(),
+            },
             link_innovation_cache: BTreeMap::new(),
         }
     }
 }
 
 impl GlobalCache for GlobalInnovationCache {
-
     // XXX: Use #entry()
-    fn get_or_create_link_innovation(&mut self, source_node: NodeInnovation, target_node: NodeInnovation) -> LinkInnovation {
+    fn get_or_create_link_innovation(&mut self,
+                                     source_node: NodeInnovation,
+                                     target_node: NodeInnovation)
+                                     -> LinkInnovation {
         let key = (source_node, target_node);
         if let Some(&cached_innovation) = self.link_innovation_cache.get(&key) {
             return cached_innovation;
@@ -112,7 +123,6 @@ impl GlobalCache for GlobalInnovationCache {
     fn create_node_innovation(&mut self) -> NodeInnovation {
         NodeInnovation(self.node_innovation_counter.next().unwrap())
     }
-
 }
 
 
@@ -123,17 +133,13 @@ impl GlobalCache for GlobalInnovationCache {
 ///
 /// We have to keep both the `network` and the `node_innovation_map` in sync. That is, whenever we
 /// add or remove a node, we have to update both.
-
 #[derive(Clone, Debug)]
 pub struct Genome<NT: NodeType> {
-
     /// Represents the acyclic feed forward network.
-
     network: Network<NT, Weight, AnyInnovation>,
 
     /// Maps the external id (innovation number) which is globally allocated, to the internal
     /// network node index.
-
     node_innovation_map: BTreeMap<NodeInnovation, NodeIndex>,
 }
 
@@ -172,7 +178,8 @@ impl<NT: NodeType> Genome<NT> {
 
     pub fn node_alignment_metric(left_genome: &Self, right_genome: &Self) -> AlignmentMetric {
         let mut node_metric = AlignmentMetric::new();
-        node_metric.max_len = cmp::max(left_genome.node_innovation_map.len(), right_genome.node_innovation_map.len());
+        node_metric.max_len = cmp::max(left_genome.node_innovation_map.len(),
+                                       right_genome.node_innovation_map.len());
 
         let left = left_genome.node_innovation_map.keys();
         let right = right_genome.node_innovation_map.keys();
@@ -197,7 +204,7 @@ impl<NT: NodeType> Genome<NT> {
     /// Aligns links of two genomes.
 
     fn align_links<F>(left_genome: &Self, right_genome: &Self, mut f: F)
-        where F: FnMut(Alignment<LinkRefItem<NT, Weight,AnyInnovation>>)
+        where F: FnMut(Alignment<LinkRefItem<NT, Weight, AnyInnovation>>)
     {
         let left_nodes = left_genome.node_innovation_map.iter();
         let right_nodes = right_genome.node_innovation_map.iter();
@@ -208,13 +215,17 @@ impl<NT: NodeType> Genome<NT> {
         let left_network = &left_genome.network;
         let right_network = &right_genome.network;
 
-        align_sorted_iterators(left_nodes, right_nodes, |&(kl, _), &(kr, _)| Ord::cmp(kl, kr), |node_alignment| {
-            match node_alignment {
-                Alignment::Match((_, &left_node_index), (_, &right_node_index)) => {
+        align_sorted_iterators(left_nodes,
+                               right_nodes,
+                               |&(kl, _), &(kr, _)| Ord::cmp(kl, kr),
+                               |node_alignment| {
+                                   match node_alignment {
+                                       Alignment::Match((_, &left_node_index),
+                                                        (_, &right_node_index)) => {
 
-                    // Both nodes are topological identical. So the link innovations can
-                    // also match up.
-                    align_sorted_iterators(left_network.link_ref_iter_for_node(left_node_index),
+                                           // Both nodes are topological identical. So the link innovations can
+                                           // also match up.
+                                           align_sorted_iterators(left_network.link_ref_iter_for_node(left_node_index),
                                            right_network.link_ref_iter_for_node(right_node_index),
                                            |left_link_ref, right_link_ref| 
                                                Ord::cmp(&left_link_ref.external_link_id(),
@@ -243,39 +254,48 @@ impl<NT: NodeType> Genome<NT> {
                                                     }
                                                 }
                                             });
-                }
+                                       }
 
-                // in general, if a node is disjoint (or excess), it's link innovations cannot match up! 
-                // XXX: Optimize: once we hit an excess link id, all remaining ids are excess as well.
+                                       // in general, if a node is disjoint (or excess), it's link innovations cannot match up!
+                                       // XXX: Optimize: once we hit an excess link id, all remaining ids are excess as well.
+                                       Alignment::Disjoint((_, &node_index), pos) |
+                                       Alignment::Excess((_, &node_index), pos) => {
+                                           let (net, range) = match pos {
+                                               LeftOrRight::Left => {
+                                                   (left_network, right_link_innov_range)
+                                               }
+                                               LeftOrRight::Right => {
+                                                   (right_network, left_link_innov_range)
+                                               }
+                                           };
 
-                Alignment::Disjoint((_, &node_index), pos) | Alignment::Excess((_, &node_index), pos) => {
-                    let (net, range) = match pos {
-                        LeftOrRight::Left => (left_network, right_link_innov_range),
-                        LeftOrRight::Right => (right_network, left_link_innov_range),
-                    };
-
-                    for link_ref in net.link_ref_iter_for_node(node_index) {
-                        if range.contains(&link_ref.external_link_id().into()) {
-                            f(Alignment::Disjoint(link_ref, pos));
-                        } else {
-                            f(Alignment::Excess(link_ref, pos));
-                        }
-                    }
-                }
-            }
-        });
+                                           for link_ref in net.link_ref_iter_for_node(node_index) {
+                                               if range.contains(&link_ref.external_link_id()
+                                                                          .into()) {
+                                                   f(Alignment::Disjoint(link_ref, pos));
+                                               } else {
+                                                   f(Alignment::Excess(link_ref, pos));
+                                               }
+                                           }
+                                       }
+                                   }
+                               });
     }
 
     /// Determine the genetic compatibility between `left_genome` and `right_genome` in terms of matching,
     /// disjoint and excess genes (both node and link genes), as well as weight distance.
 
-    fn combined_alignment_metric(left_genome: &Self, right_genome: &Self) -> CombinedAlignmentMetric {
+    fn combined_alignment_metric(left_genome: &Self,
+                                 right_genome: &Self)
+                                 -> CombinedAlignmentMetric {
         let mut metric = CombinedAlignmentMetric::new();
-        metric.node_metric.max_len = cmp::max(left_genome.network.node_count(), right_genome.network.node_count());
-        metric.link_metric.max_len = cmp::max(left_genome.network.link_count(), right_genome.network.link_count());
+        metric.node_metric.max_len = cmp::max(left_genome.network.node_count(),
+                                              right_genome.network.node_count());
+        metric.link_metric.max_len = cmp::max(left_genome.network.link_count(),
+                                              right_genome.network.link_count());
 
-        let left_nodes= left_genome.node_innovation_map.iter();
-        let right_nodes= right_genome.node_innovation_map.iter();
+        let left_nodes = left_genome.node_innovation_map.iter();
+        let right_nodes = right_genome.node_innovation_map.iter();
 
         let left_link_innov_range = left_genome.link_innovation_range();
         let right_link_innov_range = right_genome.link_innovation_range();
@@ -283,14 +303,18 @@ impl<NT: NodeType> Genome<NT> {
         let left_network = &left_genome.network;
         let right_network = &right_genome.network;
 
-        align_sorted_iterators(left_nodes, right_nodes, |&(kl, _), &(kr, _)| Ord::cmp(kl, kr), |node_alignment| {
-            match node_alignment {
-                Alignment::Match((_, &left_node_index), (_, &right_node_index)) => {
-                    metric.node_metric.matching += 1;
+        align_sorted_iterators(left_nodes,
+                               right_nodes,
+                               |&(kl, _), &(kr, _)| Ord::cmp(kl, kr),
+                               |node_alignment| {
+                                   match node_alignment {
+                                       Alignment::Match((_, &left_node_index),
+                                                        (_, &right_node_index)) => {
+                                           metric.node_metric.matching += 1;
 
-                    // Both nodes are topological identical. So the link innovations can
-                    // also match up.
-                    align_sorted_iterators(left_network.link_iter_for_node(left_node_index),
+                                           // Both nodes are topological identical. So the link innovations can
+                                           // also match up.
+                                           align_sorted_iterators(left_network.link_iter_for_node(left_node_index),
                                            right_network.link_iter_for_node(right_node_index),
                                            |&(_, left_link), &(_, right_link)| 
                                                Ord::cmp(&left_link.external_link_id(),
@@ -316,44 +340,58 @@ impl<NT: NodeType> Genome<NT> {
                                                     }
                                                 }
                                             });
-                }
+                                       }
 
-                // in general, if a node is disjoint (or excess), it's link innovations cannot match up! 
-                // XXX: Optimize: once we hit an excess link id, all remaining ids are excess as well.
+                                       // in general, if a node is disjoint (or excess), it's link innovations cannot match up!
+                                       // XXX: Optimize: once we hit an excess link id, all remaining ids are excess as well.
+                                       Alignment::Disjoint((_, &node_index), LeftOrRight::Left) => {
+                                           metric.node_metric.disjoint += 1;
 
-                Alignment::Disjoint((_, &node_index), LeftOrRight::Left) => {
-                    metric.node_metric.disjoint += 1;
+                                           for (_, link) in
+                                               left_network.link_iter_for_node(node_index) {
+                                               count_disjoint_or_excess(&mut metric.link_metric,
+                                                                        &right_link_innov_range,
+                                                                        link.external_link_id()
+                                                                            .into());
+                                           }
+                                       }
 
-                    for (_, link) in left_network.link_iter_for_node(node_index) {
-                        count_disjoint_or_excess(&mut metric.link_metric, &right_link_innov_range, link.external_link_id().into());
-                    }
-                }
+                                       Alignment::Disjoint((_, &node_index), LeftOrRight::Right) => {
+                                           {
+                                               metric.node_metric.disjoint += 1;
 
-                Alignment::Disjoint((_, &node_index), LeftOrRight::Right) => {
-                    metric.node_metric.disjoint += 1;
+                                               for (_, link) in
+                                                   right_network.link_iter_for_node(node_index) {
+                                                   count_disjoint_or_excess(&mut metric.link_metric, &left_link_innov_range, link.external_link_id().into());
+                                               }
+                                           }
+                                       }
 
-                    for (_, link) in right_network.link_iter_for_node(node_index) {
-                        count_disjoint_or_excess(&mut metric.link_metric, &left_link_innov_range, link.external_link_id().into());
-                    }
-                }
+                                       Alignment::Excess((_, &node_index), LeftOrRight::Left) => {
+                                           metric.node_metric.excess += 1;
 
-                Alignment::Excess((_, &node_index), LeftOrRight::Left) => {
-                    metric.node_metric.excess += 1;
+                                           for (_, link) in
+                                               left_network.link_iter_for_node(node_index) {
+                                               count_disjoint_or_excess(&mut metric.link_metric,
+                                                                        &right_link_innov_range,
+                                                                        link.external_link_id()
+                                                                            .into());
+                                           }
+                                       }
 
-                    for (_, link) in left_network.link_iter_for_node(node_index) {
-                        count_disjoint_or_excess(&mut metric.link_metric, &right_link_innov_range, link.external_link_id().into());
-                    }
-                }
+                                       Alignment::Excess((_, &node_index), LeftOrRight::Right) => {
+                                           metric.node_metric.excess += 1;
 
-                Alignment::Excess((_, &node_index), LeftOrRight::Right) => {
-                    metric.node_metric.excess += 1;
-
-                    for (_, link) in right_network.link_iter_for_node(node_index) {
-                        count_disjoint_or_excess(&mut metric.link_metric, &left_link_innov_range, link.external_link_id().into());
-                    }
-                }
-            }
-        });
+                                           for (_, link) in
+                                               right_network.link_iter_for_node(node_index) {
+                                               count_disjoint_or_excess(&mut metric.link_metric,
+                                                                        &left_link_innov_range,
+                                                                        link.external_link_id()
+                                                                            .into());
+                                           }
+                                       }
+                                   }
+                               });
 
         metric
     }
@@ -428,20 +466,31 @@ impl<NT: NodeType> Genome<NT> {
     /// This is because we keep the edges sorted. `n` is the number of nodes, because
     /// we have to lookup the internal node indices from the node innovations.
 
-    pub fn add_link(&mut self, source_node: NodeInnovation, target_node: NodeInnovation,
-                link_innovation: LinkInnovation, weight: Weight) {
+    pub fn add_link(&mut self,
+                    source_node: NodeInnovation,
+                    target_node: NodeInnovation,
+                    link_innovation: LinkInnovation,
+                    weight: Weight) {
         self.add_link_with_active(source_node, target_node, link_innovation, weight, true);
     }
 
-    pub fn add_link_with_active(&mut self, source_node: NodeInnovation, target_node: NodeInnovation,
-                link_innovation: LinkInnovation, weight: Weight, active: bool) {
+    pub fn add_link_with_active(&mut self,
+                                source_node: NodeInnovation,
+                                target_node: NodeInnovation,
+                                link_innovation: LinkInnovation,
+                                weight: Weight,
+                                active: bool) {
         let source_node_index = self.node_innovation_map[&source_node];
         let target_node_index = self.node_innovation_map[&target_node];
 
         debug_assert!(!self.network.link_would_cycle(source_node_index, target_node_index));
         debug_assert!(self.network.valid_link(source_node_index, target_node_index).is_ok());
 
-        let _link_index = self.network.add_link_with_active(source_node_index, target_node_index, weight, AnyInnovation(link_innovation.0), active);
+        let _link_index = self.network.add_link_with_active(source_node_index,
+                                                            target_node_index,
+                                                            weight,
+                                                            AnyInnovation(link_innovation.0),
+                                                            active);
     }
 
     /// Check if the link is valid and if it would construct a cycle.
@@ -453,11 +502,14 @@ impl<NT: NodeType> Genome<NT> {
     }
 
     /// Check if the link is valid and if it would construct a cycle.
-    fn valid_link_no_cycle(&self, source_node: NodeInnovation, target_node: NodeInnovation) -> bool {
+    fn valid_link_no_cycle(&self,
+                           source_node: NodeInnovation,
+                           target_node: NodeInnovation)
+                           -> bool {
         let source_node_index = self.node_innovation_map[&source_node];
         let target_node_index = self.node_innovation_map[&target_node];
 
-        self.network.valid_link(source_node_index, target_node_index).is_ok() && 
+        self.network.valid_link(source_node_index, target_node_index).is_ok() &&
         (!self.network.link_would_cycle(source_node_index, target_node_index))
     }
 
@@ -491,14 +543,18 @@ impl<NT: NodeType> Genome<NT> {
     }
 
     pub fn node_count(&self) -> usize {
-        assert!(self.node_innovation_map.len() == self.network.node_count()); 
+        assert!(self.node_innovation_map.len() == self.network.node_count());
         return self.node_innovation_map.len();
     }
 
     /// Performs a crossover operation on the two genomes `left_genome` and `right_genome`,
     /// producing a new offspring genome.
 
-    pub fn crossover<R: Rng>(left_genome: &Self, right_genome: &Self, c: &ProbabilisticCrossover, rng: &mut R) -> Self {
+    pub fn crossover<R: Rng>(left_genome: &Self,
+                             right_genome: &Self,
+                             c: &ProbabilisticCrossover,
+                             rng: &mut R)
+                             -> Self {
         let mut offspring = Genome::new();
 
         Genome::crossover_nodes(left_genome, right_genome, &mut offspring, c, rng);
@@ -510,60 +566,77 @@ impl<NT: NodeType> Genome<NT> {
     /// Crossover the nodes of `left_genome` and `right_genome`. So either take a node from the
     /// left or the right, depending on randomness and `c`.
 
-    fn crossover_nodes<R: Rng>(left_genome: &Self, right_genome: &Self, offspring: &mut Self, c: &ProbabilisticCrossover, rng: &mut R) {
+    fn crossover_nodes<R: Rng>(left_genome: &Self,
+                               right_genome: &Self,
+                               offspring: &mut Self,
+                               c: &ProbabilisticCrossover,
+                               rng: &mut R) {
         let left_nodes = left_genome.node_innovation_map.iter();
         let right_nodes = right_genome.node_innovation_map.iter();
 
         let left_network = &left_genome.network;
         let right_network = &right_genome.network;
 
-        align_sorted_iterators(left_nodes, right_nodes, |&(kl, _), &(kr, _)| Ord::cmp(kl, kr), |node_alignment| {
-            match node_alignment {
-                Alignment::Match((&ni_l, &left_node_index), (&ni_r, &right_node_index)) => {
-                    // Both genomes have the same node gene (node innovation).
-                    // Either take the node type from the left genome or the right.
+        align_sorted_iterators(left_nodes,
+                               right_nodes,
+                               |&(kl, _), &(kr, _)| Ord::cmp(kl, kr),
+                               |node_alignment| {
+                                   match node_alignment {
+                                       Alignment::Match((&ni_l, &left_node_index),
+                                                        (&ni_r, &right_node_index)) => {
+                                           // Both genomes have the same node gene (node innovation).
+                                           // Either take the node type from the left genome or the right.
 
-                    debug_assert!(ni_l == ni_r);
+                                           debug_assert!(ni_l == ni_r);
 
-                    if c.prob_match_left.flip(rng) {
-                        // take from left
-                        offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
-                    } else {
-                        // take from right
-                        offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
-                    }
-                }
+                                           if c.prob_match_left.flip(rng) {
+                                               // take from left
+                                               offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
+                                           } else {
+                                               // take from right
+                                               offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
+                                           }
+                                       }
 
-                Alignment::Disjoint((&ni_l, &left_node_index), LeftOrRight::Left) => {
-                    if c.prob_disjoint_left.flip(rng) {
-                        offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
-                    }
-                }
+                                       Alignment::Disjoint((&ni_l, &left_node_index),
+                                                           LeftOrRight::Left) => {
+                                           if c.prob_disjoint_left.flip(rng) {
+                                               offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
+                                           }
+                                       }
 
-                Alignment::Disjoint((&ni_r, &right_node_index), LeftOrRight::Right) => {
-                    if c.prob_disjoint_right.flip(rng) {
-                        offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
-                    }
-                }
+                                       Alignment::Disjoint((&ni_r, &right_node_index),
+                                                           LeftOrRight::Right) => {
+                                           if c.prob_disjoint_right.flip(rng) {
+                                               offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
+                                           }
+                                       }
 
-                Alignment::Excess((&ni_l, &left_node_index), LeftOrRight::Left) => {
-                    if c.prob_excess_left.flip(rng) {
-                        offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
-                    }
-                }
+                                       Alignment::Excess((&ni_l, &left_node_index),
+                                                         LeftOrRight::Left) => {
+                                           if c.prob_excess_left.flip(rng) {
+                                               offspring.add_node(ni_l, left_network.node(left_node_index).node_type().clone());
+                                           }
+                                       }
 
-                Alignment::Excess((&ni_r, &right_node_index), LeftOrRight::Right) => {
-                    if c.prob_excess_right.flip(rng) {
-                        offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
-                    }
-                }
-            }
-        });
+                                       Alignment::Excess((&ni_r, &right_node_index),
+                                                         LeftOrRight::Right) => {
+                                           if c.prob_excess_right.flip(rng) {
+                                               offspring.add_node(ni_r, right_network.node(right_node_index).node_type().clone());
+                                           }
+                                       }
+                                   }
+                               });
     }
 
     /// Crossover the links of `left_genome` and `right_genome`.
 
-    fn crossover_links<R: Rng>(left_genome: &Self, right_genome: &Self, offspring: &mut Self, c: &ProbabilisticCrossover, rng: &mut R) -> (usize, usize) {
+    fn crossover_links<R: Rng>(left_genome: &Self,
+                               right_genome: &Self,
+                               offspring: &mut Self,
+                               c: &ProbabilisticCrossover,
+                               rng: &mut R)
+                               -> (usize, usize) {
 
         let mut total_nodes_added = 0;
         let mut total_links_added = 0;
@@ -581,7 +654,7 @@ impl<NT: NodeType> Genome<NT> {
                     // A matching link that exists in both genomes.
                     // Either take it from left or right.
                     // Note that offspring already contains both the source and target node
-                    // (assuming crossover_nodes() was called before) as also both of these 
+                    // (assuming crossover_nodes() was called before) as also both of these
                     // nodes must exists in both parents.
                     let link_ref = if c.prob_match_left.flip(rng) {
                         // take link weight from left
@@ -612,17 +685,17 @@ impl<NT: NodeType> Genome<NT> {
         // Crossover disjoint and excess links. Two things to consider:
         //
         //    * Do not introduce cycles!
-        //    * Nodes might not exist. 
+        //    * Nodes might not exist.
 
         Genome::align_links(left_genome, right_genome, |link_alignment| {
             // determine the probability
             let prob = match link_alignment {
-                    // Ignore matches. We already handled matching links in "Pass 1".
-                    Alignment::Match(_, _) => None,
-                    Alignment::Disjoint(_, LeftOrRight::Left) => Some(c.prob_disjoint_left),
-                    Alignment::Disjoint(_, LeftOrRight::Right) => Some(c.prob_disjoint_right),
-                    Alignment::Excess(_, LeftOrRight::Left) => Some(c.prob_excess_left),
-                    Alignment::Excess(_, LeftOrRight::Right) => Some(c.prob_excess_right),
+                // Ignore matches. We already handled matching links in "Pass 1".
+                Alignment::Match(_, _) => None,
+                Alignment::Disjoint(_, LeftOrRight::Left) => Some(c.prob_disjoint_left),
+                Alignment::Disjoint(_, LeftOrRight::Right) => Some(c.prob_disjoint_right),
+                Alignment::Excess(_, LeftOrRight::Left) => Some(c.prob_excess_left),
+                Alignment::Excess(_, LeftOrRight::Right) => Some(c.prob_excess_right),
             };
 
             if let Some(prob) = prob {
@@ -642,18 +715,21 @@ impl<NT: NodeType> Genome<NT> {
 
                             if !offspring.has_node(source_id) {
                                 // add source node.
-                                offspring.add_node(source_id, link_ref.source_node().node_type().clone());
+                                offspring.add_node(source_id,
+                                                   link_ref.source_node().node_type().clone());
                                 nodes_added += 1;
                             }
 
                             if !offspring.has_node(target_id) {
                                 // add source node.
                                 // We take the node from the genome the link belongs to.
-                                offspring.add_node(target_id, link_ref.target_node().node_type().clone());
+                                offspring.add_node(target_id,
+                                                   link_ref.target_node().node_type().clone());
                                 nodes_added += 1;
                             }
 
-                            debug_assert!(offspring.has_node(source_id) && offspring.has_node(target_id));
+                            debug_assert!(offspring.has_node(source_id) &&
+                                          offspring.has_node(target_id));
 
                             let can_add_link = if nodes_added == 2 {
                                 // Both nodes were added from the same genome as the link origins.
@@ -697,11 +773,18 @@ impl<NT: NodeType> Genome<NT> {
 
     pub fn mutate_add_link<R, G>(&mut self, link_weight: Weight, cache: &mut G, rng: &mut R) -> bool
         where R: Rng,
-              G: GlobalCache {
+              G: GlobalCache
+    {
         match self.network.find_random_unconnected_link_no_cycle(rng) {
             Some((source_node_idx, target_node_idx)) => {
-                let ext_source_node_id: NodeInnovation = self.network.node(source_node_idx).external_node_id().into();
-                let ext_target_node_id: NodeInnovation = self.network.node(target_node_idx).external_node_id().into();
+                let ext_source_node_id: NodeInnovation = self.network
+                                                             .node(source_node_idx)
+                                                             .external_node_id()
+                                                             .into();
+                let ext_target_node_id: NodeInnovation = self.network
+                                                             .node(target_node_idx)
+                                                             .external_node_id()
+                                                             .into();
 
                 // Add new link to the offspring genome
                 self.network.add_link(source_node_idx,
@@ -724,15 +807,17 @@ impl<NT: NodeType> Genome<NT> {
     /// this panics!
 
     pub fn mutate_add_node<R, G>(&mut self,
-                                   node_type: NT,
-                                   second_link_weight: Weight,
-                                   cache: &mut G,
-                                   rng: &mut R)
-                                   -> bool
-                                   where R: Rng, G: GlobalCache {
+                                 node_type: NT,
+                                 second_link_weight: Weight,
+                                 cache: &mut G,
+                                 rng: &mut R)
+                                 -> bool
+        where R: Rng,
+              G: GlobalCache
+    {
         let link_index = match self.network.random_active_link_index(rng) {
             Some(idx) => idx,
-            None => return false
+            None => return false,
         };
 
         debug_assert!(self.network.link(link_index).is_active());
@@ -742,7 +827,7 @@ impl<NT: NodeType> Genome<NT> {
         // we keep this gene (but disable it), because this allows us to have a structurally
         // compatible genome to the original one, as disabled genes are taken into account for
         // the genomic distance measure.
-        
+
         let _ok = self.network.disable_link_index(link_index);
         assert!(_ok);
 
@@ -757,21 +842,33 @@ impl<NT: NodeType> Genome<NT> {
         // Ideally this is of full strenght. We want to make the modification
         // as little as possible.
 
-        let orig_weight = self.network.link(link_index).weight(); 
+        let orig_weight = self.network.link(link_index).weight();
         let source_node_index = self.network.link(link_index).source_node_index();
         let target_node_index = self.network.link(link_index).target_node_index();
-        let source_node_innovation: NodeInnovation = self.network.node(source_node_index).external_node_id().into();
-        let target_node_innovation: NodeInnovation = self.network.node(target_node_index).external_node_id().into();
+        let source_node_innovation: NodeInnovation = self.network
+                                                         .node(source_node_index)
+                                                         .external_node_id()
+                                                         .into();
+        let target_node_innovation: NodeInnovation = self.network
+                                                         .node(target_node_index)
+                                                         .external_node_id()
+                                                         .into();
 
-        self.network.add_link(source_node_index,
-                              new_node_index,
-                              orig_weight,
-                              AnyInnovation(cache.get_or_create_link_innovation(source_node_innovation, new_node_innovation).0));
+        self.network
+            .add_link(source_node_index,
+                      new_node_index,
+                      orig_weight,
+                      AnyInnovation(cache.get_or_create_link_innovation(source_node_innovation,
+                                                                        new_node_innovation)
+                                         .0));
 
-        self.network.add_link(new_node_index,
-                              target_node_index,
-                              second_link_weight,
-                              AnyInnovation(cache.get_or_create_link_innovation(new_node_innovation, target_node_innovation).0));
+        self.network
+            .add_link(new_node_index,
+                      target_node_index,
+                      second_link_weight,
+                      AnyInnovation(cache.get_or_create_link_innovation(new_node_innovation,
+                                                                        target_node_innovation)
+                                         .0));
         return true;
     }
 
@@ -788,7 +885,8 @@ impl<NT: NodeType> Genome<NT> {
                                                  mutate_prob: Prob,
                                                  weight_perturbance: &WeightPerturbanceMethod,
                                                  link_weight_range: &WeightRange,
-                                                 rng: &mut R) -> usize {
+                                                 rng: &mut R)
+                                                 -> usize {
 
         // Our network does not contain any links. Abort.
         if self.network.link_count() == 0 {
@@ -828,12 +926,9 @@ impl<NT: NodeType> Genome<NT> {
                 self.network.remove_link_at(idx);
                 true
             }
-            None => {
-                false
-            }
+            None => false,
         }
     }
-
 }
 
 /// This is used to weight a link AlignmentMetric.
@@ -885,8 +980,8 @@ pub struct Mater<'a, N, S, C>
     pub weight_perturbance: WeightPerturbanceMethod,
     pub mutate_weights: MutateMethodWeighting,
     pub global_cache: &'a mut C,
-    pub element_strategy: &'a S, 
-    pub _n: PhantomData<N>, 
+    pub element_strategy: &'a S,
+    pub _n: PhantomData<N>,
 }
 
 impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
@@ -911,10 +1006,12 @@ impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
             let mutate_method = MutateMethod::random_with(&self.mutate_weights, rng);
             match mutate_method {
                 MutateMethod::ModifyWeight => {
-                    let _modifications = offspring.mutate_link_weights_uniformly(
-                        self.p_mutate_element,
-                        &self.weight_perturbance,
-                        &self.element_strategy.link_weight_range(), rng);
+                    let _modifications =
+                        offspring.mutate_link_weights_uniformly(self.p_mutate_element,
+                                                                &self.weight_perturbance,
+                                                                &self.element_strategy
+                                                                     .link_weight_range(),
+                                                                rng);
                 }
                 MutateMethod::AddConnection => {
                     let link_weight = self.element_strategy.link_weight_range().random_weight(rng);
@@ -926,7 +1023,10 @@ impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
                 MutateMethod::AddNode => {
                     let second_link_weight = self.element_strategy.full_link_weight();
                     let node_type = self.element_strategy.random_node_type(rng);
-                    let _modified = offspring.mutate_add_node(node_type, second_link_weight, self.global_cache, rng);
+                    let _modified = offspring.mutate_add_node(node_type,
+                                                              second_link_weight,
+                                                              self.global_cache,
+                                                              rng);
                 }
             }
 
@@ -944,17 +1044,21 @@ mod tests {
     #[derive(Clone, Debug)]
     struct NT;
     impl NodeType for NT {
-        fn accept_incoming_links(&self) -> bool { true }
-        fn accept_outgoing_links(&self) -> bool { true }
+        fn accept_incoming_links(&self) -> bool {
+            true
+        }
+        fn accept_outgoing_links(&self) -> bool {
+            true
+        }
     }
 
     #[test]
     fn test_add_node() {
         let mut genome = Genome::<NT>::new();
         assert_eq!(0, genome.node_count());
-        genome.add_node(NodeInnovation(0), NT); 
+        genome.add_node(NodeInnovation(0), NT);
         assert_eq!(1, genome.node_count());
-        genome.add_node(NodeInnovation(1), NT); 
+        genome.add_node(NodeInnovation(1), NT);
         assert_eq!(2, genome.node_count());
     }
 
@@ -962,8 +1066,8 @@ mod tests {
     #[should_panic(expected = "Duplicate node_innovation")]
     fn test_add_duplicate_node() {
         let mut genome = Genome::<NT>::new();
-        genome.add_node(NodeInnovation(0), NT); 
-        genome.add_node(NodeInnovation(0), NT); 
+        genome.add_node(NodeInnovation(0), NT);
+        genome.add_node(NodeInnovation(0), NT);
     }
 
     #[test]
@@ -973,9 +1077,9 @@ mod tests {
         let n1 = NodeInnovation(1);
         let n2 = NodeInnovation(2);
 
-        genome.add_node(n0, NT); 
-        genome.add_node(n1, NT); 
-        genome.add_node(n2, NT); 
+        genome.add_node(n0, NT);
+        genome.add_node(n1, NT);
+        genome.add_node(n2, NT);
 
         assert_eq!(0, genome.link_count());
 
@@ -993,20 +1097,23 @@ mod tests {
         let n1 = NodeInnovation(1);
         let n2 = NodeInnovation(2);
 
-        genome.add_node(n0, NT); 
-        genome.add_node(n1, NT); 
-        genome.add_node(n2, NT); 
+        genome.add_node(n0, NT);
+        genome.add_node(n1, NT);
+        genome.add_node(n2, NT);
 
         assert_eq!(InnovationRange::Empty, genome.link_innovation_range());
 
         genome.add_link(n0, n1, LinkInnovation(5), Weight(0.0));
-        assert_eq!(InnovationRange::Single(LinkInnovation(5)), genome.link_innovation_range());
+        assert_eq!(InnovationRange::Single(LinkInnovation(5)),
+                   genome.link_innovation_range());
 
         genome.add_link(n0, n2, LinkInnovation(1), Weight(0.0));
-        assert_eq!(InnovationRange::FromTo(LinkInnovation(1), LinkInnovation(5)), genome.link_innovation_range());
+        assert_eq!(InnovationRange::FromTo(LinkInnovation(1), LinkInnovation(5)),
+                   genome.link_innovation_range());
 
         genome.add_link(n1, n2, LinkInnovation(99), Weight(0.0));
-        assert_eq!(InnovationRange::FromTo(LinkInnovation(1), LinkInnovation(99)), genome.link_innovation_range());
+        assert_eq!(InnovationRange::FromTo(LinkInnovation(1), LinkInnovation(99)),
+                   genome.link_innovation_range());
     }
 
     #[test]
@@ -1014,23 +1121,29 @@ mod tests {
         let mut genome = Genome::<NT>::new();
         assert_eq!(InnovationRange::Empty, genome.node_innovation_range());
 
-        genome.add_node(NodeInnovation(5), NT); 
-        assert_eq!(InnovationRange::Single(NodeInnovation(5)), genome.node_innovation_range());
+        genome.add_node(NodeInnovation(5), NT);
+        assert_eq!(InnovationRange::Single(NodeInnovation(5)),
+                   genome.node_innovation_range());
 
-        genome.add_node(NodeInnovation(7), NT); 
-        assert_eq!(InnovationRange::FromTo(NodeInnovation(5), NodeInnovation(7)), genome.node_innovation_range());
+        genome.add_node(NodeInnovation(7), NT);
+        assert_eq!(InnovationRange::FromTo(NodeInnovation(5), NodeInnovation(7)),
+                   genome.node_innovation_range());
 
-        genome.add_node(NodeInnovation(6), NT); 
-        assert_eq!(InnovationRange::FromTo(NodeInnovation(5), NodeInnovation(7)), genome.node_innovation_range());
+        genome.add_node(NodeInnovation(6), NT);
+        assert_eq!(InnovationRange::FromTo(NodeInnovation(5), NodeInnovation(7)),
+                   genome.node_innovation_range());
 
-        genome.add_node(NodeInnovation(4), NT); 
-        assert_eq!(InnovationRange::FromTo(NodeInnovation(4), NodeInnovation(7)), genome.node_innovation_range());
+        genome.add_node(NodeInnovation(4), NT);
+        assert_eq!(InnovationRange::FromTo(NodeInnovation(4), NodeInnovation(7)),
+                   genome.node_innovation_range());
 
-        genome.add_node(NodeInnovation(1), NT); 
-        assert_eq!(InnovationRange::FromTo(NodeInnovation(1), NodeInnovation(7)), genome.node_innovation_range());
+        genome.add_node(NodeInnovation(1), NT);
+        assert_eq!(InnovationRange::FromTo(NodeInnovation(1), NodeInnovation(7)),
+                   genome.node_innovation_range());
 
-        genome.add_node(NodeInnovation(1000), NT); 
-        assert_eq!(InnovationRange::FromTo(NodeInnovation(1), NodeInnovation(1000)), genome.node_innovation_range());
+        genome.add_node(NodeInnovation(1000), NT);
+        assert_eq!(InnovationRange::FromTo(NodeInnovation(1), NodeInnovation(1000)),
+                   genome.node_innovation_range());
     }
 
     #[test]

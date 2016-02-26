@@ -90,10 +90,9 @@ impl<T> Alignment<T> {
 
 /// Align the items of two sorted (unique) iterators.
 pub fn align_sorted_iterators<CMP, F, I>(a: I, b: I, cmp: CMP, mut f: F)
-    where 
-          CMP: Fn(&I::Item, &I::Item) -> Ordering, 
+    where CMP: Fn(&I::Item, &I::Item) -> Ordering,
           F: FnMut(Alignment<I::Item>),
-          I: Iterator,
+          I: Iterator
 {
     let mut left_iter = a.peekable();
     let mut right_iter = b.peekable();
@@ -192,7 +191,7 @@ mod tests {
 
     fn align_as_vec<I>(a: I, b: I) -> Vec<Alignment<I::Item>>
         where I::Item: Ord + Clone,
-              I: Iterator,
+              I: Iterator
     {
         let mut c = Vec::new();
         align_sorted_iterators(a, b, Ord::cmp, |alignment| c.push(alignment));
@@ -216,15 +215,15 @@ mod tests {
 
         let mut r = Vec::new();
         super::align_sorted_iterators(s1.iter().cloned(),
-        s2.iter().cloned(),
-        Ord::cmp,
-        |alignment| {
-            match alignment {
-                Alignment::Match(a, _b) => r.push(a),
-                Alignment::Excess(a, _) => r.push(a),
-                Alignment::Disjoint(a, _) => r.push(a),
-            }
-        });
+                                      s2.iter().cloned(),
+                                      Ord::cmp,
+                                      |alignment| {
+                                          match alignment {
+                                              Alignment::Match(a, _b) => r.push(a),
+                                              Alignment::Excess(a, _) => r.push(a),
+                                              Alignment::Disjoint(a, _) => r.push(a),
+                                          }
+                                      });
 
         assert_eq!(vec![0, 1, 5, 7, 8, 9, 55], r);
     }

@@ -193,12 +193,12 @@ impl<T: Genotype + Debug> Population<T, RatedSorted> {
     // #[inline]
     // fn is_fitter(&self, i: usize, j: usize) -> bool {
     //    i < j
-    //}
+    // }
 
     /// Create a single offspring Genome by selecting random parents
     /// from the best `select_size` individuals of the populations.
 
-    fn create_single_offspring<R, M>(&self, select_size: usize, mate: &mut M, rng: &mut R) -> T 
+    fn create_single_offspring<R, M>(&self, select_size: usize, mate: &mut M, rng: &mut R) -> T
         where R: Rng,
               M: Mate<T>
     {
@@ -207,12 +207,14 @@ impl<T: Genotype + Debug> Population<T, RatedSorted> {
         // We do not need tournament selection here as our population is sorted.
         // We simply determine two individuals out of `select_size`.
 
-        let mut parent1 = rng.gen_range(0, select_size); 
+        let mut parent1 = rng.gen_range(0, select_size);
         let mut parent2 = rng.gen_range(0, select_size);
 
         // try to find a parent2 != parent1. retry three times.
         for _ in 0..3 {
-            if parent2 != parent1 { break }
+            if parent2 != parent1 {
+                break;
+            }
             parent2 = rng.gen_range(0, select_size);
         }
 
@@ -224,9 +226,9 @@ impl<T: Genotype + Debug> Population<T, RatedSorted> {
         debug_assert!(parent1 <= parent2);
 
         mate.mate(&self.individuals[parent1].genome,
-                                  &self.individuals[parent2].genome,
-                                  parent1 == parent2,
-                                  rng)
+                  &self.individuals[parent2].genome,
+                  parent1 == parent2,
+                  rng)
     }
 }
 
@@ -286,7 +288,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                               compatibility: &C,
                               mate: &mut M,
                               rng: &mut R)
-                -> (Population<T, Rated>, Population<T, Unrated>)
+                              -> (Population<T, Rated>, Population<T, Unrated>)
         where R: Rng,
               C: Distance<T>,
               M: Mate<T>

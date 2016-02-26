@@ -8,11 +8,10 @@ pub trait Innovation: Copy + Debug + Ord {
 pub enum InnovationRange<T: Innovation> {
     Empty,
     Single(T),
-    FromTo(T, T)
+    FromTo(T, T),
 }
 
 impl<T: Innovation> InnovationRange<T> {
-
     /// Creates an empty InnovationRange.
 
     pub fn empty() -> Self {
@@ -25,9 +24,7 @@ impl<T: Innovation> InnovationRange<T> {
         match *self {
             InnovationRange::Empty => false,
             InnovationRange::Single(ref a) => a == innovation,
-            InnovationRange::FromTo(ref min, ref max) => {
-                innovation >= min && innovation <= max 
-            }
+            InnovationRange::FromTo(ref min, ref max) => innovation >= min && innovation <= max,
         }
     }
 
@@ -66,7 +63,7 @@ impl<T: Innovation> InnovationRange<T> {
         match self {
             InnovationRange::Empty => InnovationRange::Empty,
             InnovationRange::Single(a) => InnovationRange::Single(f(a)),
-            InnovationRange::FromTo(min, max) => InnovationRange::FromTo(f(min), f(max))
+            InnovationRange::FromTo(min, max) => InnovationRange::FromTo(f(min), f(max)),
         }
     }
 }

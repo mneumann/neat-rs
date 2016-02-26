@@ -7,8 +7,7 @@ pub struct AlignmentMetric {
     pub weight_distance: f64,
 }
 
-impl Eq for AlignmentMetric {
-}
+impl Eq for AlignmentMetric {}
 
 impl AlignmentMetric {
     pub fn new() -> AlignmentMetric {
