@@ -5,6 +5,7 @@ extern crate graph_io_gml;
 extern crate closed01;
 extern crate petgraph;
 extern crate cppn;
+extern crate asexp;
 #[macro_use] extern crate log;
 //extern crate toml;
 

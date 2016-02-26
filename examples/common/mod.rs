@@ -6,8 +6,40 @@ use graph_neighbor_matching::graph::OwnedGraph;
 use neat::genomes::acyclic_network::NodeType;
 use graph_io_gml::parse_gml;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
+use asexp::Sexp;
+use petgraph::{Directed, Graph};
+use std::f32::{INFINITY, NEG_INFINITY};
+use closed01::Closed01;
 
-use closed01;
+fn convert_weight(w: Option<&Sexp>) -> Option<f32> {
+    match w {
+        Some(s) => s.get_float().map(|f| f as f32),
+        None => {
+            // use a default
+            Some(0.0)
+        }
+    }
+}
+
+fn determine_edge_value_range<T>(g: &Graph<T, f32, Directed>) -> (f32, f32) {
+    let mut w_min = INFINITY;
+    let mut w_max = NEG_INFINITY;
+    for i in g.raw_edges() {
+        w_min = w_min.min(i.weight);
+        w_max = w_max.max(i.weight);
+    }
+    (w_min, w_max)
+}
+
+fn normalize_to_closed01(w: f32, range: (f32, f32)) -> Closed01<f32> {
+    assert!(range.1 >= range.0);
+    let dist = range.1 - range.0;
+    if dist == 0.0 {
+        Closed01::zero()
+    } else {
+        Closed01::new((w - range.0) / dist)
+    }
+}
 
 pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGraph<N>
     where N: Clone + Debug,
@@ -26,11 +58,12 @@ pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGrap
                           &|node_sexp| -> Option<N> {
                               node_sexp.and_then(|se| se.get_str().map(|s| convert_node_from_str(s)))
                           },
-                          &|edge_sexp| -> Option<closed01::Closed01<f32>> {
-                              edge_sexp.and_then(|se| se.get_float().map(|s| closed01::Closed01::new(s as f32))).
-                                  or(Some(closed01::Closed01::zero()))
-                          })
+                          &convert_weight)
                     .unwrap();
+    let edge_range = determine_edge_value_range(&graph);
+    let graph = graph.map(|_, nw| nw.clone(),
+                          |_, &ew| normalize_to_closed01(ew, edge_range));
+
     OwnedGraph::from_petgraph(&graph)
 }
 
@@ -72,7 +105,7 @@ impl NodeColorMatching<Neuron> for NodeColors {
     fn node_color_matching(&self,
                            node_i_value: &Neuron,
                            node_j_value: &Neuron)
-                           -> closed01::Closed01<f32> {
+                           -> Closed01<f32> {
 
         // Treat nodes as equal regardless of their activation function or input/output number.
         let eq = match (node_i_value, node_j_value) {
@@ -83,9 +116,9 @@ impl NodeColorMatching<Neuron> for NodeColors {
         };
 
         if eq {
-            closed01::Closed01::one()
+            Closed01::one()
         } else {
-            closed01::Closed01::zero()
+            Closed01::zero()
         }
     }
 }
