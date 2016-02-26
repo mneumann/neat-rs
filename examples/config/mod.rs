@@ -5,12 +5,40 @@ use neat::weight::{WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 use neat::genomes::acyclic_network::GenomeDistance;
 use rand::Closed01;
+use asexp::Sexp;
 
-pub struct Configuration;
+#[derive(Debug)]
+pub struct Configuration {
+    edge_score: bool
+}
+
+fn parse_bool(s: &str) -> bool {
+    match s {
+        "true" => true,
+        "false" => false,
+        _ => panic!("invalid bool"),
+    }
+}
 
 impl Configuration {
     pub fn new() -> Self {
-        Configuration
+        Configuration {
+            edge_score: true
+        }
+    }
+
+    /// Treats the strings as top-level `asexp` file.
+    ///
+    /// # Panics
+    ///
+    /// If the string has the wrong format or mandantory options are missing. 
+
+    pub fn from_str(s: &str) -> Self {
+        let expr = Sexp::parse_toplevel(s).unwrap();
+        let map = expr.into_map().unwrap();
+        Configuration {
+            edge_score: parse_bool(map["edge_score"].get_str().unwrap())
+        }
     }
 
     pub fn p_crossover(&self) -> Prob {
@@ -55,7 +83,7 @@ impl Configuration {
     }
 
     pub fn edge_score(&self) -> bool {
-        true
+        self.edge_score
     }
 
     pub fn population_size(&self) -> usize {

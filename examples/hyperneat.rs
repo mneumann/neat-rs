@@ -7,7 +7,6 @@ extern crate petgraph;
 extern crate cppn;
 extern crate asexp;
 #[macro_use] extern crate log;
-//extern crate toml;
 
 mod common;
 mod config;
