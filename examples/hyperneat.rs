@@ -5,6 +5,7 @@ extern crate graph_io_gml;
 extern crate closed01;
 extern crate petgraph;
 extern crate cppn;
+#[macro_use] extern crate log;
 //extern crate toml;
 
 mod common;
@@ -13,23 +14,21 @@ mod config;
 use neat::population::{Population, Unrated, Runner};
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
 use neat::fitness::Fitness;
-use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
-use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
-use rand::{Rng, Closed01};
+use graph_neighbor_matching::graph::GraphBuilder;
+use rand::Rng;
 use std::marker::PhantomData;
-use common::{load_graph, Neuron, NodeColors, convert_neuron_from_str};
+use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity};
 use cppn::cppn::{Cppn, CppnNode};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
 use cppn::position::Position2d;
-use neat::weight::{Weight, WeightRange, WeightPerturbanceMethod};
-use neat::prob::Prob;
+use neat::weight::{Weight, WeightRange};
 
 type Node = CppnNode<BipolarActivationFunction>;
 
 #[derive(Debug)]
 struct FitnessEvaluator {
-    target_graph: OwnedGraph<Neuron>,
+    sim: GraphSimilarity,
 }
 
 impl FitnessEvaluator {
@@ -57,11 +56,8 @@ impl FitnessEvaluator {
             }
         }
         let graph = builder.graph();
-        // println!("graph: {:#?}", graph);
 
-        let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
-        s.iterate(50, 0.01);
-        s.score_optimal_sum_norm(None, ScoreNorm::MaxDegree).get()
+        self.sim.fitness(graph)
     }
 }
 
@@ -87,8 +83,6 @@ impl ElementStrategy<Node> for ES {
     }
 }
 
-const POP_SIZE: usize = 100;
-
 fn main() {
     let mut rng = rand::thread_rng();
 
@@ -98,7 +92,12 @@ fn main() {
     println!("Using target graph: {}", target_graph_file);
 
     let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph(&target_graph_file, convert_neuron_from_str),
+        sim: GraphSimilarity {
+            target_graph: load_graph(&cfg.target_graph_file(), convert_neuron_from_str),
+            edge_score: cfg.edge_score(),
+            iters: cfg.neighbormatching_iters(),
+            eps: cfg.neighbormatching_eps()
+        }
     };
 
     let mut cache = GlobalInnovationCache::new();
@@ -125,16 +124,16 @@ fn main() {
 
     let mut initial_pop = Population::<_, Unrated>::new();
 
-    for _ in 0..POP_SIZE {
+    for _ in 0..cfg.population_size() {
         initial_pop.add_genome(Box::new(template_genome.clone()));
     }
-    assert!(initial_pop.len() == POP_SIZE);
+    assert!(initial_pop.len() == cfg.population_size());
 
     let mut mater = Mater {
-        p_crossover: Prob::new(0.5),
+        p_crossover: cfg.p_crossover(),
         p_crossover_detail: cfg.probabilistic_crossover(),
-        p_mutate_element: Prob::new(0.01), // 1% mutation rate per link
-        weight_perturbance: WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.2)},
+        p_mutate_element: cfg.p_mutate_element(),
+        weight_perturbance: cfg.weight_perturbance(),
         mutate_weights: cfg.mutate_weights(),
         global_cache: &mut cache,
         element_strategy: &ES,
@@ -142,19 +141,21 @@ fn main() {
     };
 
     let mut runner = Runner {
-        pop_size: POP_SIZE,
-        elite_percentage: Closed01(0.05),
-        selection_percentage: Closed01(0.2),
-        compatibility_threshold: 1.0,
+        pop_size: cfg.population_size(),
+        elite_percentage: cfg.elite_percentage(),
+        selection_percentage: cfg.selection_percentage(),
+        compatibility_threshold: cfg.compatibility_threshold(),
         compatibility: &cfg.genome_compatibility(),
         mate: &mut mater,
         fitness: &|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64),
         _marker: PhantomData,
     };
 
+    let max_iters = cfg.stop_after_iters();
+    let good_fitness = cfg.stop_if_fitness_better_than();
     let (iter, new_pop) = runner.run(initial_pop,
                                      &|iter, pop| {
-                                         iter >= 100 || pop.best_individual().unwrap().fitness().get() > 0.99
+                                         iter >= max_iters || pop.best_individual().unwrap().fitness().get() > good_fitness
                                      },
                                      &mut rng);
 

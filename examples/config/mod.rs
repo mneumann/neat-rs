@@ -1,14 +1,73 @@
 use std::env;
 use neat::crossover::ProbabilisticCrossover;
 use neat::mutate::MutateMethodWeighting;
+use neat::weight::{WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 use neat::genomes::acyclic_network::GenomeDistance;
+use rand::Closed01;
 
 pub struct Configuration;
 
 impl Configuration {
     pub fn new() -> Self {
         Configuration
+    }
+
+    pub fn p_crossover(&self) -> Prob {
+        Prob::new(0.5)
+    }
+
+    pub fn p_mutate_element(&self) -> Prob {
+        // 1% mutation rate per link
+        Prob::new(0.01)
+    }
+
+    pub fn weight_perturbance(&self) -> WeightPerturbanceMethod {
+        WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.1)}
+    }
+
+    pub fn elite_percentage(&self) -> Closed01<f64> {
+        Closed01(0.05)
+    }
+
+    pub fn selection_percentage(&self) -> Closed01<f64> {
+        Closed01(0.2)
+    }
+
+    pub fn compatibility_threshold(&self) -> f64 {
+        1.0
+    }
+
+    pub fn stop_after_iters(&self) -> usize {
+        100
+    }
+
+    pub fn stop_if_fitness_better_than(&self) -> f64 {
+        0.99
+    }
+
+    pub fn neighbormatching_iters(&self) -> usize {
+        50
+    }
+
+    pub fn neighbormatching_eps(&self) -> f32 {
+        0.01
+    }
+
+    pub fn edge_score(&self) -> bool {
+        true
+    }
+
+    pub fn n_inputs(&self) -> usize {
+        2
+    }
+
+    pub fn n_outputs(&self) -> usize {
+        3
+    }
+
+    pub fn population_size(&self) -> usize {
+        100
     }
 
     pub fn target_graph_file(&self) -> String {
