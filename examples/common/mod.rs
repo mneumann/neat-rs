@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::Read;
 use graph_neighbor_matching::graph::OwnedGraph;
-use neat::genomes::acyclic_network::{NodeType, Genome, GenomeDistance, GlobalCache};
+use neat::genomes::acyclic_network::{NodeType, Genome, GlobalCache};
 use neat::crossover::ProbabilisticCrossover;
 use graph_io_gml::parse_gml;
 use rand::Rng;
@@ -13,11 +13,6 @@ use closed01;
 use neat::weight::{Weight, WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 use std::marker::PhantomData;
-use std::env;
-
-pub fn net_file() -> String {
-    env::args().nth(1).unwrap().to_owned()
-}
 
 /// This trait is used to specialize link weight creation and node activation function creation.
 
@@ -26,34 +21,6 @@ pub trait ElementStrategy<NT: NodeType>
     fn link_weight_range(&self) -> WeightRange;
     fn full_link_weight(&self) -> Weight;
     fn random_node_type<R: Rng>(&self, rng: &mut R) -> NT;
-}
-
-pub fn default_genome_compatibility() -> GenomeDistance {
-    GenomeDistance {
-        excess: 1.0,
-        disjoint: 1.0,
-        weight: 0.0,
-    }
-}
-
-pub fn default_probabilistic_crossover() -> ProbabilisticCrossover {
-    ProbabilisticCrossover {
-        prob_match_left: Prob::new(0.5), // NEAT always selects a random parent for matching genes
-        prob_disjoint_left: Prob::new(0.9),
-        prob_excess_left: Prob::new(0.9),
-        prob_disjoint_right: Prob::new(0.15),
-        prob_excess_right: Prob::new(0.15),
-    }
-}
-
-pub fn default_mutate_weights() -> MutateMethodWeighting {
-    // XXX:
-    MutateMethodWeighting {
-        w_modify_weight: 100,
-        w_add_node: 1,
-        w_add_connection: 10,
-        w_delete_connection: 1,
-    }
 }
 
 pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGraph<N>

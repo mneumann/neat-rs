@@ -5,8 +5,10 @@ extern crate graph_io_gml;
 extern crate closed01;
 extern crate petgraph;
 extern crate cppn;
+//extern crate toml;
 
 mod common;
+mod config;
 
 use neat::population::{Population, Unrated, Runner};
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache};
@@ -15,7 +17,7 @@ use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy, net_file};
+use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy};
 use cppn::cppn::{Cppn, CppnNode};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
@@ -90,11 +92,13 @@ const POP_SIZE: usize = 100;
 fn main() {
     let mut rng = rand::thread_rng();
 
-    let net = net_file();
-    println!("Using net: {}", net);
+    let cfg = config::Configuration::new();
+
+    let target_graph_file = cfg.target_graph_file();
+    println!("Using target graph: {}", target_graph_file);
 
     let fitness_evaluator = FitnessEvaluator {
-        target_graph: load_graph(&net, convert_neuron_from_str),
+        target_graph: load_graph(&target_graph_file, convert_neuron_from_str),
     };
 
     let mut cache = GlobalInnovationCache::new();
@@ -128,10 +132,10 @@ fn main() {
 
     let mut mater = Mater {
         p_crossover: Prob::new(0.5),
-        p_crossover_detail: common::default_probabilistic_crossover(),
+        p_crossover_detail: cfg.probabilistic_crossover(),
         p_mutate_element: Prob::new(0.01), // 1% mutation rate per link
         weight_perturbance: WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.2)},
-        mutate_weights: common::default_mutate_weights(),
+        mutate_weights: cfg.mutate_weights(),
         global_cache: &mut cache,
         element_strategy: &ES,
         _n: PhantomData,
@@ -142,7 +146,7 @@ fn main() {
         elite_percentage: Closed01(0.05),
         selection_percentage: Closed01(0.2),
         compatibility_threshold: 1.0,
-        compatibility: &common::default_genome_compatibility(),
+        compatibility: &cfg.genome_compatibility(),
         mate: &mut mater,
         fitness: &|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64),
         _marker: PhantomData,
