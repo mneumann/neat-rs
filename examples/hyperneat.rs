@@ -86,14 +86,15 @@ impl ElementStrategy<Node> for ES {
 fn main() {
     let mut rng = rand::thread_rng();
 
-    let cfg = config::Configuration::new();
+    let cfg = config::Configuration::from_file();
 
-    let target_graph_file = cfg.target_graph_file();
-    println!("Using target graph: {}", target_graph_file);
+    println!("{:?}", cfg);
+
+    let target_graph = load_graph(&cfg.target_graph_file(), convert_neuron_from_str);
 
     let fitness_evaluator = FitnessEvaluator {
         sim: GraphSimilarity {
-            target_graph: load_graph(&cfg.target_graph_file(), convert_neuron_from_str),
+            target_graph: target_graph,
             edge_score: cfg.edge_score(),
             iters: cfg.neighbormatching_iters(),
             eps: cfg.neighbormatching_eps()

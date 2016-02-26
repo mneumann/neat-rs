@@ -7,11 +7,14 @@ use neat::genomes::acyclic_network::GenomeDistance;
 use rand::Closed01;
 use asexp::Sexp;
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::Read;
 
 #[derive(Debug)]
 pub struct Configuration {
     population_size: usize,
     edge_score: bool,
+    target_graph_file: Option<String>,
 
     w_modify_weight: u32,
     w_add_node: u32,
@@ -43,7 +46,24 @@ fn parse_uint(map: &BTreeMap<String, Sexp>, key: &str) -> Option<u64> {
     }
 }
 
+fn parse_string(map: &BTreeMap<String, Sexp>, key: &str) -> Option<String> {
+    if map.contains_key(key) {
+        Some(map[key].get_str().unwrap().to_owned())
+    } else {
+        None
+    }
+}
+
 impl Configuration {
+
+    pub fn from_file() -> Self {
+        let filename = env::args().nth(1).unwrap().to_owned();
+        let mut data = String::new();
+        let _ = File::open(&filename).unwrap().read_to_string(&mut data).unwrap();
+
+        Configuration::from_str(&data)
+    }
+
     pub fn new() -> Self {
         Configuration {
             edge_score: false,
@@ -52,6 +72,8 @@ impl Configuration {
             w_add_node: 1,
             w_add_connection: 10,
             w_delete_connection: 1,
+
+            target_graph_file: None,
         }
     }
 
@@ -73,6 +95,8 @@ impl Configuration {
         if let Some(val) = parse_uint(&map, "w_add_node") { cfg.w_add_node = val as u32; }
         if let Some(val) = parse_uint(&map, "w_add_connection") { cfg.w_add_connection = val as u32; }
         if let Some(val) = parse_uint(&map, "w_delete_connection") { cfg.w_delete_connection = val as u32; }
+
+        if let Some(val) = parse_string(&map, "target_graph_file") { cfg.target_graph_file = Some(val); }
 
         cfg
     }
@@ -127,7 +151,11 @@ impl Configuration {
     }
 
     pub fn target_graph_file(&self) -> String {
-        env::args().nth(1).unwrap().to_owned()
+        if let Some(ref file) = self.target_graph_file {
+            file.to_owned()
+        } else {
+            env::args().nth(2).unwrap().to_owned()
+        }
     }
 
     pub fn genome_compatibility(&self) -> GenomeDistance {
