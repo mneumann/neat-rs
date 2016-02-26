@@ -12,6 +12,9 @@ use crossover::ProbabilisticCrossover;
 use std::convert::Into;
 use std::ops::Range;
 use prob::Prob;
+use mutate::{MutateMethod, MutateMethodWeighting};
+use std::marker::PhantomData;
+use traits::Mate;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AnyInnovation(usize);
@@ -855,6 +858,79 @@ impl<NT: NodeType> Distance<Genome<NT>> for GenomeDistance {
             m.weight_distance / (m.matching as f64)
         } else {
             0.0
+        }
+    }
+}
+
+/// This trait is used to specialize link weight creation and node activation function creation.
+
+pub trait ElementStrategy<NT: NodeType>
+{
+    fn link_weight_range(&self) -> WeightRange;
+    fn full_link_weight(&self) -> Weight;
+    fn random_node_type<R: Rng>(&self, rng: &mut R) -> NT;
+}
+
+/// Implementation for mating.
+
+pub struct Mater<'a, N, S, C>
+    where N: NodeType + 'a,
+          S: ElementStrategy<N> + 'a,
+          C: GlobalCache + 'a
+{
+    // probability for crossover. P_mutate = 1.0 - p_crossover
+    pub p_crossover: Prob,
+    pub p_crossover_detail: ProbabilisticCrossover,
+    pub p_mutate_element: Prob,
+    pub weight_perturbance: WeightPerturbanceMethod,
+    pub mutate_weights: MutateMethodWeighting,
+    pub global_cache: &'a mut C,
+    pub element_strategy: &'a S, 
+    pub _n: PhantomData<N>, 
+}
+
+impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
+    where N: NodeType + 'a,
+          S: ElementStrategy<N> + 'a,
+          C: GlobalCache + 'a
+{
+    // Add an argument that descibes whether both genomes are of equal fitness.
+    // Pass individual, which includes the fitness.
+    fn mate<R: Rng>(&mut self,
+                    parent_left: &Genome<N>,
+                    parent_right: &Genome<N>,
+                    prefer_mutate: bool,
+                    rng: &mut R)
+                    -> Genome<N> {
+        if prefer_mutate == false && self.p_crossover.flip(rng) {
+            Genome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
+        } else {
+            // mutate
+            let mut offspring = parent_left.clone();
+
+            let mutate_method = MutateMethod::random_with(&self.mutate_weights, rng);
+            match mutate_method {
+                MutateMethod::ModifyWeight => {
+                    let _modifications = offspring.mutate_link_weights_uniformly(
+                        self.p_mutate_element,
+                        &self.weight_perturbance,
+                        &self.element_strategy.link_weight_range(), rng);
+                }
+                MutateMethod::AddConnection => {
+                    let link_weight = self.element_strategy.link_weight_range().random_weight(rng);
+                    let _modified = offspring.mutate_add_link(link_weight, self.global_cache, rng);
+                }
+                MutateMethod::DeleteConnection => {
+                    let _modified = offspring.mutate_delete_link(rng);
+                }
+                MutateMethod::AddNode => {
+                    let second_link_weight = self.element_strategy.full_link_weight();
+                    let node_type = self.element_strategy.random_node_type(rng);
+                    let _modified = offspring.mutate_add_node(node_type, second_link_weight, self.global_cache, rng);
+                }
+            }
+
+            return offspring;
         }
     }
 }

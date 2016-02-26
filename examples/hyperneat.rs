@@ -11,13 +11,13 @@ mod common;
 mod config;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache};
+use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
 use neat::fitness::Fitness;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::{Rng, Closed01};
 use std::marker::PhantomData;
-use common::{load_graph, Mater, Neuron, NodeColors, convert_neuron_from_str, ElementStrategy};
+use common::{load_graph, Neuron, NodeColors, convert_neuron_from_str};
 use cppn::cppn::{Cppn, CppnNode};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
