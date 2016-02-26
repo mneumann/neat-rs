@@ -14,7 +14,7 @@ mod config;
 use neat::population::{Population, Unrated, Runner};
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
 use neat::fitness::Fitness;
-use graph_neighbor_matching::graph::GraphBuilder;
+use graph_neighbor_matching::graph::{GraphBuilder, OwnedGraph};
 use rand::Rng;
 use std::marker::PhantomData;
 use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount};
@@ -100,15 +100,7 @@ fn test_distribute_interval() {
     assert_eq!(None, iter.next());
 }
 
-#[derive(Debug)]
-struct FitnessEvaluator {
-    sim: GraphSimilarity,
-    node_count: NodeCount,
-}
-
-impl FitnessEvaluator {
-    // A larger fitness means "better"
-    fn fitness(&self, genome: &Genome<Node>) -> f32 {
+fn genome_to_graph(genome: &Genome<Node>, node_count: &NodeCount) -> OwnedGraph<Neuron> {
         let mut substrate = Substrate::new();
 
         let mut y_iter = DistributeIntervalIter::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
@@ -116,7 +108,7 @@ impl FitnessEvaluator {
         // Inputs
         {
             let y = y_iter.next().unwrap();
-            for x in DistributeIntervalIter::new(self.node_count.inputs, -1.0, 1.0) {
+            for x in DistributeIntervalIter::new(node_count.inputs, -1.0, 1.0) {
                 substrate.add_node(Position2d::new(x, y), Neuron::Input);
             }
         }
@@ -124,7 +116,7 @@ impl FitnessEvaluator {
         // Hidden
         {
             let y = y_iter.next().unwrap();
-            for x in DistributeIntervalIter::new(self.node_count.hidden, -1.0, 1.0) {
+            for x in DistributeIntervalIter::new(node_count.hidden, -1.0, 1.0) {
                 substrate.add_node(Position2d::new(x, y), Neuron::Hidden);
             }
         }
@@ -132,7 +124,7 @@ impl FitnessEvaluator {
         // Outputs
         {
             let y = y_iter.next().unwrap();
-            for x in DistributeIntervalIter::new(self.node_count.outputs, -1.0, 1.0) {
+            for x in DistributeIntervalIter::new(node_count.outputs, -1.0, 1.0) {
                 substrate.add_node(Position2d::new(x, y), Neuron::Output);
             }
         }
@@ -151,9 +143,19 @@ impl FitnessEvaluator {
                                  closed01::Closed01::new(link.weight as f32));
             }
         }
-        let graph = builder.graph();
+        return builder.graph();
+}
 
-        self.sim.fitness(graph)
+#[derive(Debug)]
+struct FitnessEvaluator {
+    sim: GraphSimilarity,
+    node_count: NodeCount,
+}
+
+impl FitnessEvaluator {
+    // A larger fitness means "better"
+    fn fitness(&self, genome: &Genome<Node>) -> f32 {
+        self.sim.fitness(genome_to_graph(genome, &self.node_count))
     }
 }
 
