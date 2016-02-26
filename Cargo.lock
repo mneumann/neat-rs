@@ -71,7 +71,7 @@ dependencies = [
 [[package]]
 name = "graph-neighbor-matching"
 version = "0.5.0"
-source = "git+https://github.com/mneumann/graph-neighbor-matching#c1bd54a35446bc063652b41693197e5ecdba25ee"
+source = "git+https://github.com/mneumann/graph-neighbor-matching#2e68d21438d79c4ebcc1f5a442a24e147f6f8b57"
 dependencies = [
  "closed01 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "munkres 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",

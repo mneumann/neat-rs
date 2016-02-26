@@ -16,7 +16,7 @@ use neat::fitness::Fitness;
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::Rng;
 use std::marker::PhantomData;
-use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount};
+use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml};
 use neat::weight::{Weight, WeightRange};
 
 fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
@@ -139,5 +139,9 @@ fn main() {
                                      &mut rng);
 
     println!("iter: {}", iter);
-    println!("{:#?}", new_pop.best_individual());
+    let best = new_pop.best_individual().unwrap();
+    println!("{:#?}", best);
+
+    info!("Writing best.gml");
+    write_gml("best.gml", &genome_to_graph(best.genome()));
 }

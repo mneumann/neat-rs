@@ -3,13 +3,16 @@ use std::io::Read;
 use std::fmt::Debug;
 use graph_neighbor_matching::NodeColorMatching;
 use graph_neighbor_matching::graph::OwnedGraph;
+use graph_neighbor_matching::{Graph, Edges};
 use neat::genomes::acyclic_network::NodeType;
 use graph_io_gml::parse_gml;
 use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use asexp::Sexp;
-use petgraph::{Directed, Graph};
+use petgraph::Directed;
+use petgraph::Graph as PetGraph;
 use std::f32::{INFINITY, NEG_INFINITY};
 use closed01::Closed01;
+use std::io::{self, Write};
 
 fn convert_weight(w: Option<&Sexp>) -> Option<f32> {
     match w {
@@ -21,7 +24,7 @@ fn convert_weight(w: Option<&Sexp>) -> Option<f32> {
     }
 }
 
-fn determine_edge_value_range<T>(g: &Graph<T, f32, Directed>) -> (f32, f32) {
+fn determine_edge_value_range<T>(g: &PetGraph<T, f32, Directed>) -> (f32, f32) {
     let mut w_min = INFINITY;
     let mut w_max = NEG_INFINITY;
     for i in g.raw_edges() {
@@ -65,6 +68,41 @@ pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGrap
                           |_, &ew| normalize_to_closed01(ew, edge_range));
 
     OwnedGraph::from_petgraph(&graph)
+}
+
+pub fn write_gml(filename: &str, graph: &OwnedGraph<Neuron>) {
+    let mut file = File::create(filename).unwrap();
+    to_gml(&mut file, graph).unwrap();
+}
+
+pub fn to_gml<W: Write>(wr: &mut W, graph: &OwnedGraph<Neuron>) -> io::Result<()> {
+    try!(writeln!(wr, "graph ["));
+    try!(writeln!(wr, "  directed 1"));
+
+    for nidx in 0..graph.num_nodes() {
+        let node_type = 
+            match graph.node_value(nidx) {
+                &Neuron::Input => {
+                    "input"
+                }
+                &Neuron::Output => {
+                    "output"
+                }
+                &Neuron::Hidden => {
+                    "hidden"
+                }
+            };
+
+        try!(writeln!(wr, "  node [id {} weight \"{}\"]", nidx, node_type));
+    }
+    for nidx in 0..graph.num_nodes() {
+        let edges = graph.out_edges_of(nidx);
+        for eidx in 0..edges.num_edges() {
+            try!(writeln!(wr, "  edge [source {} target {} weight {}]", nidx, edges.nth_edge(eidx).unwrap(), edges.nth_edge_weight(eidx).unwrap().get()));
+        }
+    }
+    try!(writeln!(wr, "]"));
+    Ok(())
 }
 
 #[derive(Debug)]
