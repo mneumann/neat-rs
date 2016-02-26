@@ -6,13 +6,15 @@ extern crate closed01;
 extern crate petgraph;
 extern crate cppn;
 extern crate asexp;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 mod common;
 mod config;
 
 use neat::population::{Population, Unrated, Runner};
-use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
+use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater,
+                                     ElementStrategy};
 use neat::fitness::Fitness;
 use graph_neighbor_matching::graph::{GraphBuilder, OwnedGraph};
 use rand::Rng;
@@ -33,7 +35,7 @@ struct DistributeIntervalIter {
     n: usize,
     i: usize,
     left: f64,
-    right: f64
+    right: f64,
 }
 
 impl DistributeIntervalIter {
@@ -59,7 +61,7 @@ impl Iterator for DistributeIntervalIter {
         debug_assert!(self.n > 0);
 
         let width = self.right - self.left;
-        let step = width / self.n as f64; 
+        let step = width / self.n as f64;
         let start = self.left + (step / 2.0);
 
         let new = start + (self.i as f64) * step;
@@ -101,49 +103,49 @@ fn test_distribute_interval() {
 }
 
 fn genome_to_graph(genome: &Genome<Node>, node_count: &NodeCount) -> OwnedGraph<Neuron> {
-        let mut substrate = Substrate::new();
+    let mut substrate = Substrate::new();
 
-        let mut y_iter = DistributeIntervalIter::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
+    let mut y_iter = DistributeIntervalIter::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
 
-        // Inputs
-        {
-            let y = y_iter.next().unwrap();
-            for x in DistributeIntervalIter::new(node_count.inputs, -1.0, 1.0) {
-                substrate.add_node(Position2d::new(x, y), Neuron::Input);
-            }
+    // Inputs
+    {
+        let y = y_iter.next().unwrap();
+        for x in DistributeIntervalIter::new(node_count.inputs, -1.0, 1.0) {
+            substrate.add_node(Position2d::new(x, y), Neuron::Input);
         }
+    }
 
-        // Hidden
-        {
-            let y = y_iter.next().unwrap();
-            for x in DistributeIntervalIter::new(node_count.hidden, -1.0, 1.0) {
-                substrate.add_node(Position2d::new(x, y), Neuron::Hidden);
-            }
+    // Hidden
+    {
+        let y = y_iter.next().unwrap();
+        for x in DistributeIntervalIter::new(node_count.hidden, -1.0, 1.0) {
+            substrate.add_node(Position2d::new(x, y), Neuron::Hidden);
         }
+    }
 
-        // Outputs
-        {
-            let y = y_iter.next().unwrap();
-            for x in DistributeIntervalIter::new(node_count.outputs, -1.0, 1.0) {
-                substrate.add_node(Position2d::new(x, y), Neuron::Output);
-            }
+    // Outputs
+    {
+        let y = y_iter.next().unwrap();
+        for x in DistributeIntervalIter::new(node_count.outputs, -1.0, 1.0) {
+            substrate.add_node(Position2d::new(x, y), Neuron::Output);
         }
+    }
 
-        let mut cppn = Cppn::new(genome.network());
+    let mut cppn = Cppn::new(genome.network());
 
-        // now develop the cppn. the result is a graph
-        let mut builder = GraphBuilder::new();
-        for (i, node) in substrate.nodes().iter().enumerate() {
-            let _ = builder.add_node(i, node.node_type.clone());
+    // now develop the cppn. the result is a graph
+    let mut builder = GraphBuilder::new();
+    for (i, node) in substrate.nodes().iter().enumerate() {
+        let _ = builder.add_node(i, node.node_type.clone());
+    }
+    for link in substrate.iter_links(&mut cppn, None) {
+        if link.weight >= 0.0 && link.weight <= 1.0 {
+            builder.add_edge(link.source_idx,
+                             link.target_idx,
+                             closed01::Closed01::new(link.weight as f32));
         }
-        for link in substrate.iter_links(&mut cppn, None) {
-            if link.weight >= 0.0 && link.weight <= 1.0 {
-                builder.add_edge(link.source_idx,
-                                 link.target_idx,
-                                 closed01::Closed01::new(link.weight as f32));
-            }
-        }
-        return builder.graph();
+    }
+    return builder.graph();
 }
 
 #[derive(Debug)]
@@ -196,7 +198,7 @@ fn main() {
             target_graph: target_graph,
             edge_score: cfg.edge_score(),
             iters: cfg.neighbormatching_iters(),
-            eps: cfg.neighbormatching_eps()
+            eps: cfg.neighbormatching_eps(),
         },
         node_count: node_count,
     };
@@ -256,7 +258,9 @@ fn main() {
     let good_fitness = cfg.stop_if_fitness_better_than();
     let (iter, new_pop) = runner.run(initial_pop,
                                      &|iter, pop| {
-                                         iter >= max_iters || pop.best_individual().unwrap().fitness().get() > good_fitness
+                                         iter >= max_iters ||
+                                         pop.best_individual().unwrap().fitness().get() >
+                                         good_fitness
                                      },
                                      &mut rng);
 
