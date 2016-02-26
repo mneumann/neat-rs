@@ -67,24 +67,36 @@ pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGrap
     OwnedGraph::from_petgraph(&graph)
 }
 
-pub fn determine_inputs_and_outputs(graph: &OwnedGraph<Neuron>) -> (usize, usize) {
-    let mut inputs = 0;
-    let mut outputs = 0;
+pub struct NodeCount {
+    pub inputs: usize,
+    pub outputs: usize,
+    pub hidden: usize,
+}
 
-    for node in graph.nodes() {
-        match node.node_value() {
-            &Neuron::Input => {
-                inputs += 1;
-            }
-            &Neuron::Output => {
-                outputs += 1;
-            }
-            _ => {
+impl NodeCount {
+    pub fn from_graph(graph: &OwnedGraph<Neuron>) -> Self {
+        let mut cnt = NodeCount {
+            inputs: 0,
+            outputs: 0,
+            hidden: 0
+        };
+
+        for node in graph.nodes() {
+            match node.node_value() {
+                &Neuron::Input => {
+                    cnt.inputs += 1;
+                }
+                &Neuron::Output => {
+                    cnt.outputs += 1;
+                }
+                &Neuron::Hidden => {
+                    cnt.hidden += 1;
+                }
             }
         }
-    }
 
-    (inputs, outputs)
+        return cnt;
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

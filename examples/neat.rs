@@ -70,7 +70,7 @@ fn main() {
     println!("{:?}", cfg);
 
     let target_graph = load_graph(&cfg.target_graph_file(), convert_neuron_from_str);
-    let (n_inputs, n_outputs) = common::determine_inputs_and_outputs(&target_graph);
+    let node_count = common::NodeCount::from_graph(&target_graph);
 
     let fitness_evaluator = FitnessEvaluator {
         sim: GraphSimilarity {
@@ -90,12 +90,12 @@ fn main() {
 
     let template_genome = {
         let mut genome = Genome::new();
-        assert!(n_inputs > 0 && n_outputs > 0);
+        assert!(node_count.inputs > 0 && node_count.outputs > 0);
 
-        for _ in 0..n_inputs {
+        for _ in 0..node_count.inputs {
             genome.add_node(cache.create_node_innovation(), Neuron::Input);
         }
-        for _ in 0..n_outputs {
+        for _ in 0..node_count.outputs {
             genome.add_node(cache.create_node_innovation(), Neuron::Output);
         }
         genome
