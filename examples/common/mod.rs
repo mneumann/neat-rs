@@ -67,6 +67,7 @@ pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGrap
     OwnedGraph::from_petgraph(&graph)
 }
 
+#[derive(Debug)]
 pub struct NodeCount {
     pub inputs: usize,
     pub outputs: usize,

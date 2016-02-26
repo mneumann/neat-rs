@@ -17,7 +17,7 @@ use neat::fitness::Fitness;
 use graph_neighbor_matching::graph::GraphBuilder;
 use rand::Rng;
 use std::marker::PhantomData;
-use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity};
+use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount};
 use cppn::cppn::{Cppn, CppnNode};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
@@ -26,27 +26,123 @@ use neat::weight::{Weight, WeightRange};
 
 type Node = CppnNode<BipolarActivationFunction>;
 
+
+/// Distribute n points equally within the interval [left, right]
+
+struct DistributeIntervalIter {
+    n: usize,
+    i: usize,
+    left: f64,
+    right: f64
+}
+
+impl DistributeIntervalIter {
+    fn new(n: usize, left: f64, right: f64) -> Self {
+        assert!(left <= right);
+        DistributeIntervalIter {
+            n: n,
+            i: 0,
+            left: left,
+            right: right,
+        }
+    }
+}
+
+impl Iterator for DistributeIntervalIter {
+    type Item = f64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i >= self.n {
+            return None;
+        }
+
+        debug_assert!(self.n > 0);
+
+        let width = self.right - self.left;
+        let step = width / self.n as f64; 
+        let start = self.left + (step / 2.0);
+
+        let new = start + (self.i as f64) * step;
+        self.i += 1;
+
+        return Some(new);
+    }
+}
+
+#[test]
+fn test_distribute_interval() {
+    let mut iter = DistributeIntervalIter::new(0, -1.0, 1.0);
+    assert_eq!(None, iter.next());
+
+    let mut iter = DistributeIntervalIter::new(1, -1.0, 1.0);
+    assert_eq!(Some(0.0), iter.next());
+    assert_eq!(None, iter.next());
+
+    let mut iter = DistributeIntervalIter::new(3, -1.0, 1.0);
+    assert_eq!(-66, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(0, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(66, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(None, iter.next());
+
+    let mut iter = DistributeIntervalIter::new(4, -1.0, 1.0);
+    assert_eq!(-75, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(-25, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(25, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(75, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(None, iter.next());
+
+    let mut iter = DistributeIntervalIter::new(5, -1.0, 1.0);
+    assert_eq!(-80, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(-40, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(0, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(40, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(80, (iter.next().unwrap() * 100.0) as usize);
+    assert_eq!(None, iter.next());
+}
+
 #[derive(Debug)]
 struct FitnessEvaluator {
     sim: GraphSimilarity,
+    node_count: NodeCount,
 }
 
 impl FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &Genome<Node>) -> f32 {
         let mut substrate = Substrate::new();
-        substrate.add_node(Position2d::new(-1.0, -1.0), Neuron::Input);
-        substrate.add_node(Position2d::new(1.0, -1.0), Neuron::Input);
-        substrate.add_node(Position2d::new(-1.0, 1.0), Neuron::Output);
-        substrate.add_node(Position2d::new(0.0, 1.0), Neuron::Output);
-        substrate.add_node(Position2d::new(1.0, 1.0), Neuron::Output);
+
+        let mut y_iter = DistributeIntervalIter::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
+
+        // Inputs
+        {
+            let y = y_iter.next().unwrap();
+            for x in DistributeIntervalIter::new(self.node_count.inputs, -1.0, 1.0) {
+                substrate.add_node(Position2d::new(x, y), Neuron::Input);
+            }
+        }
+
+        // Hidden
+        {
+            let y = y_iter.next().unwrap();
+            for x in DistributeIntervalIter::new(self.node_count.hidden, -1.0, 1.0) {
+                substrate.add_node(Position2d::new(x, y), Neuron::Hidden);
+            }
+        }
+
+        // Outputs
+        {
+            let y = y_iter.next().unwrap();
+            for x in DistributeIntervalIter::new(self.node_count.outputs, -1.0, 1.0) {
+                substrate.add_node(Position2d::new(x, y), Neuron::Output);
+            }
+        }
 
         let mut cppn = Cppn::new(genome.network());
 
         // now develop the cppn. the result is a graph
         let mut builder = GraphBuilder::new();
         for (i, node) in substrate.nodes().iter().enumerate() {
-            let _ = builder.add_node(i, node.data.clone());
+            let _ = builder.add_node(i, node.node_type.clone());
         }
         for link in substrate.iter_links(&mut cppn, None) {
             if link.weight >= 0.0 && link.weight <= 1.0 {
@@ -91,6 +187,7 @@ fn main() {
     println!("{:?}", cfg);
 
     let target_graph = load_graph(&cfg.target_graph_file(), convert_neuron_from_str);
+    let node_count = NodeCount::from_graph(&target_graph);
 
     let fitness_evaluator = FitnessEvaluator {
         sim: GraphSimilarity {
@@ -98,7 +195,8 @@ fn main() {
             edge_score: cfg.edge_score(),
             iters: cfg.neighbormatching_iters(),
             eps: cfg.neighbormatching_eps()
-        }
+        },
+        node_count: node_count,
     };
 
     let mut cache = GlobalInnovationCache::new();

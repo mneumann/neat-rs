@@ -16,7 +16,7 @@ use neat::fitness::Fitness;
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::Rng;
 use std::marker::PhantomData;
-use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity};
+use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount};
 use neat::weight::{Weight, WeightRange};
 
 fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
@@ -70,7 +70,7 @@ fn main() {
     println!("{:?}", cfg);
 
     let target_graph = load_graph(&cfg.target_graph_file(), convert_neuron_from_str);
-    let node_count = common::NodeCount::from_graph(&target_graph);
+    let node_count = NodeCount::from_graph(&target_graph);
 
     let fitness_evaluator = FitnessEvaluator {
         sim: GraphSimilarity {

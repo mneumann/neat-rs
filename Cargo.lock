@@ -40,7 +40,7 @@ dependencies = [
 [[package]]
 name = "cppn"
 version = "0.0.1"
-source = "git+https://github.com/mneumann/cppn-rs#6dfae647037b2387a91e3b8aa9e6c955386d2ee2"
+source = "git+https://github.com/mneumann/cppn-rs#3a5d7b51ad56d5714364f8efbc7b2ddf7d0e6a75"
 dependencies = [
  "acyclic-network 0.0.1 (git+https://github.com/mneumann/acyclic-network-rs)",
  "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
