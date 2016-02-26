@@ -1,12 +1,12 @@
 use super::fitness::Fitness;
 use super::traits::{Genotype, Distance};
-use super::selection;
 use rand::{Rng, Closed01};
 use super::traits::Mate;
 use std::marker::PhantomData;
 use std::num::Zero;
 use std::fmt::Debug;
 use std::cmp;
+use std::mem;
 use rayon::par_iter::*;
 use super::prob::probabilistic_round;
 
@@ -40,18 +40,81 @@ pub struct Rated;
 #[derive(Debug)]
 pub struct RatedSorted;
 
-impl Rating for Unrated { }
-impl Rating for Rated { }
-impl Rating for RatedSorted { }
+impl Rating for Unrated {}
+impl Rating for Rated {}
+impl Rating for RatedSorted {}
 
-impl IsRated for Rated { }
-impl IsRated for RatedSorted { }
-impl IsRatedSorted for RatedSorted { }
+impl IsRated for Rated {}
+impl IsRated for RatedSorted {}
+impl IsRatedSorted for RatedSorted {}
 
 #[derive(Debug)]
 pub struct Population<T: Genotype + Debug, R: Rating> {
     individuals: Vec<Individual<T>>,
     _marker: PhantomData<R>,
+}
+
+#[derive(Debug)]
+pub struct Niches<T: Genotype + Debug> {
+    total_individuals: usize,
+    niches: Vec<Population<T, Rated>>,
+}
+
+impl<T: Genotype + Debug> Niches<T> {
+    pub fn new() -> Self {
+        Niches {
+            total_individuals: 0,
+            niches: Vec::new(),
+        }
+    }
+
+    pub fn into_iter(self) -> ::std::vec::IntoIter<Population<T, Rated>> {
+        self.niches.into_iter()
+    }
+
+    /// The sum of all "mean fitnesses" of all niches.
+
+    fn total_mean(&self) -> Fitness {
+        self.niches.iter().map(|ind| ind.mean_fitness()).sum()
+    }
+
+    /// Number of niches
+
+    pub fn len(&self) -> usize {
+        self.niches.len()
+    }
+
+    /// Add an individual to one of the niches.
+
+    pub fn add_individual<R, C>(&mut self,
+                                ind: Individual<T>,
+                                compatibility_threshold: f64,
+                                compatibility: &C,
+                                rng: &mut R)
+        where R: Rng,
+              C: Distance<T>
+    {
+        self.total_individuals += 1;
+
+        for niche in self.niches.iter_mut() {
+            // Is this genome compatible with this niche? Test against a random genome.
+            let compatible = match rng.choose(&niche.individuals) {
+                Some(probe) => {
+                    compatibility.distance(&probe.genome, &ind.genome) < compatibility_threshold
+                }
+                // If a niche is empty, a genome always is compatible (note that a niche can't be empyt)
+                None => true,
+            };
+            if compatible {
+                niche.add_individual(ind);
+                return;
+            }
+        }
+        // if no compatible niche was found, create a new niche containing this genome.
+        let mut new_niche = Population::new();
+        new_niche.add_individual(ind);
+        self.niches.push(new_niche);
+    }
 }
 
 impl<T: Genotype + Debug, R: Rating> Population<T, R> {
@@ -110,7 +173,7 @@ impl<T: Genotype + Debug> Population<T, Unrated> {
     }
 }
 
-impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
+impl<T: Genotype + Debug, R: IsRated> Population<T, R> {
     fn mean_fitness(&self) -> Fitness {
         let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness).sum();
         sum / Fitness::new(self.len() as f64)
@@ -127,11 +190,46 @@ impl<T: Genotype + Debug> Population<T, RatedSorted> {
     // In a sorted population, the individual with the lower index
     // has a better fitness.
 
-    #[inline]
-    fn is_fitter(&self, i: usize, j: usize) -> bool {
-        i < j
+    // #[inline]
+    // fn is_fitter(&self, i: usize, j: usize) -> bool {
+    //    i < j
+    //}
+
+    /// Create a single offspring Genome by selecting random parents
+    /// from the best `select_size` individuals of the populations.
+
+    fn create_single_offspring<R, M>(&self, select_size: usize, mate: &mut M, rng: &mut R) -> T 
+        where R: Rng,
+              M: Mate<T>
+    {
+        assert!(select_size > 0 && select_size <= self.len());
+
+        // We do not need tournament selection here as our population is sorted.
+        // We simply determine two individuals out of `select_size`.
+
+        let mut parent1 = rng.gen_range(0, select_size); 
+        let mut parent2 = rng.gen_range(0, select_size);
+
+        // try to find a parent2 != parent1. retry three times.
+        for _ in 0..3 {
+            if parent2 != parent1 { break }
+            parent2 = rng.gen_range(0, select_size);
+        }
+
+        // `mate` assumes that the first parent performs better.
+        if parent1 > parent2 {
+            mem::swap(&mut parent1, &mut parent2);
+        }
+
+        debug_assert!(parent1 <= parent2);
+
+        mate.mate(&self.individuals[parent1].genome,
+                                  &self.individuals[parent2].genome,
+                                  parent1 == parent2,
+                                  rng)
     }
 }
+
 
 impl<T: Genotype + Debug> Population<T, Rated> {
     pub fn add_individual(&mut self, ind: Individual<T>) {
@@ -139,9 +237,9 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     }
 
     // Return true if genome at position `i` is fitter that `j`
-    //fn is_fitter(&self, i: usize, j: usize) -> bool {
+    // fn is_fitter(&self, i: usize, j: usize) -> bool {
     //    self.individuals[i].fitness > self.individuals[j].fitness
-    //}
+    // }
 
     // higher value of fitness means that the individual is fitter.
     pub fn sort(mut self) -> Population<T, RatedSorted> {
@@ -176,20 +274,19 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     //    - r% of the best genomes produce offspring
     //    - determine the elitist size. those are always copied into the new generation.
     //
-    pub fn produce_offspring<C, M, R>(self,
-                                      pop_size: usize,
-                                      // how many of the best individuals of a niche are copied as-is into the
-                                      // new population?
-                                      elite_percentage: Closed01<f64>,
-                                      // how many of the best individuals of a niche are selected for
-                                      // reproduction?
-                                      selection_percentage: Closed01<f64>,
-                                      tournament_k: usize,
-                                      compatibility_threshold: f64,
-                                      compatibility: &C,
-                                      mate: &mut M,
-                                      rng: &mut R)
-                                      -> (Population<T, Rated>, Population<T, Unrated>)
+    pub fn reproduce<C, M, R>(self,
+                              pop_size: usize,
+                              // how many of the best individuals of a niche are copied as-is into the
+                              // new population?
+                              elite_percentage: Closed01<f64>,
+                              // how many of the best individuals of a niche are selected for
+                              // reproduction?
+                              selection_percentage: Closed01<f64>,
+                              compatibility_threshold: f64,
+                              compatibility: &C,
+                              mate: &mut M,
+                              rng: &mut R)
+                -> (Population<T, Rated>, Population<T, Unrated>)
         where R: Rng,
               C: Distance<T>,
               M: Mate<T>
@@ -204,7 +301,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         debug!("number of niches: {}", num_niches);
 
         assert!(num_niches > 0);
-        let total_mean: Fitness = niches.iter().map(|ind| ind.mean_fitness()).sum();
+        let total_mean = niches.total_mean();
         assert!(total_mean.get() >= 0.0);
 
         let mut new_unrated_population: Population<T, Unrated> = Population::new();
@@ -245,27 +342,9 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             // at first produce `offspring_size` individuals from the top `select_size`
             // individuals.
             if select_size > 0 {
-                let mut n = offspring_size;
-                while n > 0 {
-                    let (parent1, parent2) =
-                        selection::tournament_selection_fast2(rng,
-                                                              &|i, j| sorted_niche.is_fitter(i, j),
-                                                              select_size,
-                                                              cmp::min(select_size, tournament_k),
-                                                              3);
-
-                    // `mate` assumes that the left parent performs better.
-                    let (left, right) = if sorted_niche.is_fitter(parent1, parent2) {
-                        (parent1, parent2)
-                    } else {
-                        (parent2, parent1)
-                    };
-                    let offspring = mate.mate(&sorted_niche.individuals[left].genome,
-                                              &sorted_niche.individuals[right].genome,
-                                              left == right,
-                                              rng);
+                for _ in 0..offspring_size {
+                    let offspring = sorted_niche.create_single_offspring(select_size, mate, rng);
                     new_unrated_population.add_genome(Box::new(offspring));
-                    n -= 1;
                 }
             }
 
@@ -276,36 +355,20 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         return (new_rated_population, new_unrated_population);
     }
 
-    // Partitions the whole population into species (niches)
-    fn partition<R, C>(self,
-                       rng: &mut R,
-                       compatibility_threshold: f64,
-                       compatibility: &C)
-                       -> Vec<Population<T, Rated>>
+    /// Partition the whole population into species (niches)
+
+    pub fn partition<R, C>(self,
+                           rng: &mut R,
+                           compatibility_threshold: f64,
+                           compatibility: &C)
+                           -> Niches<T>
         where R: Rng,
               C: Distance<T>
     {
-        let mut niches: Vec<Population<T, Rated>> = Vec::new();
+        let mut niches = Niches::new();
 
-        'outer: for ind in self.individuals.into_iter() {
-            for niche in niches.iter_mut() {
-                // Is this genome compatible with this niche? Test against a random genome.
-                let compatible = match rng.choose(&niche.individuals) {
-                    Some(probe) => {
-                        compatibility.distance(&probe.genome, &ind.genome) < compatibility_threshold
-                    }
-                    // If a niche is empty, a genome always is compatible (note that a niche can't be empyt)
-                    None => true,
-                };
-                if compatible {
-                    niche.add_individual(ind);
-                    continue 'outer;
-                }
-            }
-            // if no compatible niche was found, create a new niche containing this genome.
-            let mut new_niche = Population::new();
-            new_niche.add_individual(ind);
-            niches.push(new_niche);
+        for ind in self.individuals.into_iter() {
+            niches.add_individual(ind, compatibility_threshold, compatibility, rng);
         }
 
         niches
@@ -326,7 +389,6 @@ pub struct Runner<'a, T, C, M, F>
     // how many of the best individuals of a niche are selected for
     // reproduction?
     pub selection_percentage: Closed01<f64>,
-    pub tournament_k: usize,
     pub compatibility_threshold: f64,
     pub compatibility: &'a C,
     pub mate: &'a mut M,
@@ -353,14 +415,13 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
 
         while !goal_condition(iteration, &current_rated_pop) {
             let (new_rated, new_unrated) =
-                current_rated_pop.produce_offspring(self.pop_size,
-                                                    Closed01(self.elite_percentage.0),
-                                                    Closed01(self.selection_percentage.0),
-                                                    self.tournament_k,
-                                                    self.compatibility_threshold,
-                                                    self.compatibility,
-                                                    self.mate,
-                                                    rng);
+                current_rated_pop.reproduce(self.pop_size,
+                                            Closed01(self.elite_percentage.0),
+                                            Closed01(self.selection_percentage.0),
+                                            self.compatibility_threshold,
+                                            self.compatibility,
+                                            self.mate,
+                                            rng);
 
             current_rated_pop = new_rated;
             current_rated_pop.append(new_unrated.rate_par(self.fitness));

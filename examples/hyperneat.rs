@@ -138,7 +138,6 @@ fn main() {
         pop_size: POP_SIZE,
         elite_percentage: Closed01(0.05),
         selection_percentage: Closed01(0.2),
-        tournament_k: 3,
         compatibility_threshold: 1.0,
         compatibility: &common::default_genome_compatibility(),
         mate: &mut mater,
