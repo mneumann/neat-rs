@@ -5,121 +5,145 @@ graph
   [
     id 1
     label "InterL1"
+    weight "hidden"
   ]
   node
   [
     id 2
     label "InterL2"
+    weight "hidden"
   ]
   node
   [
     id 3
     label "InterL3"
+    weight "hidden"
   ]
   node
   [
     id 4
     label "InterL4"
+    weight "hidden"
   ]
   node
   [
     id 5
     label "InterR1"
+    weight "hidden"
   ]
   node
   [
     id 6
     label "InterR2"
+    weight "hidden"
   ]
   node
   [
     id 7
     label "InterR3"
+    weight "hidden"
   ]
   node
   [
     id 8
     label "InterR4"
+    weight "hidden"
   ]
   node
   [
     id 9
     label "KommaL1"
+    weight "output"
   ]
   node
   [
     id 10
     label "KommaL2"
+    weight "output"
   ]
   node
   [
     id 11
     label "KommaL3"
+    weight "output"
   ]
   node
   [
     id 12
     label "KommaL4"
+    weight "output"
   ]
   node
   [
     id 13
     label "KommaR1"
+    weight "output"
   ]
   node
   [
     id 14
     label "KommaR2"
+    weight "output"
   ]
   node
   [
     id 15
     label "KommaR3"
+    weight "output"
   ]
   node
   [
     id 16
     label "KommaR4"
+    weight "output"
   ]
   node
   [
     id 17
     label "SensorL1"
+    weight "input"
   ]
   node
   [
     id 18
     label "SensorL2"
+    weight "input"
   ]
   node
   [
     id 19
     label "SensorL3"
+    weight "input"
   ]
   node
   [
     id 20
     label "SensorL4"
+    weight "input"
   ]
   node
   [
     id 21
     label "SensorR1"
+    weight "input"
   ]
   node
   [
     id 22
     label "SensorR2"
+    weight "input"
   ]
   node
   [
     id 23
     label "SensorR3"
+    weight "input"
   ]
   node
   [
     id 24
     label "SensorR4"
+    weight "input"
   ]
   edge
   [
