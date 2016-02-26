@@ -67,6 +67,26 @@ pub fn load_graph<N, F>(graph_file: &str, convert_node_from_str: F) -> OwnedGrap
     OwnedGraph::from_petgraph(&graph)
 }
 
+pub fn determine_inputs_and_outputs(graph: &OwnedGraph<Neuron>) -> (usize, usize) {
+    let mut inputs = 0;
+    let mut outputs = 0;
+
+    for node in graph.nodes() {
+        match node.node_value() {
+            &Neuron::Input => {
+                inputs += 1;
+            }
+            &Neuron::Output => {
+                outputs += 1;
+            }
+            _ => {
+            }
+        }
+    }
+
+    (inputs, outputs)
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Neuron {
     Input,

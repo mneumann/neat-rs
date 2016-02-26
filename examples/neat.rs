@@ -68,9 +68,11 @@ fn main() {
     
     let cfg = config::Configuration::new();
 
+    let target_graph = load_graph(&cfg.target_graph_file(), convert_neuron_from_str);
+    let (n_inputs, n_outputs) = common::determine_inputs_and_outputs(&target_graph);
     let fitness_evaluator = FitnessEvaluator {
         sim: GraphSimilarity {
-            target_graph: load_graph(&cfg.target_graph_file(), convert_neuron_from_str),
+            target_graph: target_graph,
             edge_score: cfg.edge_score(),
             iters: cfg.neighbormatching_iters(),
             eps: cfg.neighbormatching_eps()
@@ -86,12 +88,12 @@ fn main() {
 
     let template_genome = {
         let mut genome = Genome::new();
-        assert!(cfg.n_inputs() > 0 && cfg.n_outputs() > 0);
+        assert!(n_inputs > 0 && n_outputs > 0);
 
-        for _ in 0..cfg.n_inputs() {
+        for _ in 0..n_inputs {
             genome.add_node(cache.create_node_innovation(), Neuron::Input);
         }
-        for _ in 0..cfg.n_outputs() {
+        for _ in 0..n_outputs {
             genome.add_node(cache.create_node_innovation(), Neuron::Output);
         }
         genome

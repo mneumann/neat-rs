@@ -58,14 +58,6 @@ impl Configuration {
         true
     }
 
-    pub fn n_inputs(&self) -> usize {
-        2
-    }
-
-    pub fn n_outputs(&self) -> usize {
-        3
-    }
-
     pub fn population_size(&self) -> usize {
         100
     }

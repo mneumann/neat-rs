@@ -72,7 +72,7 @@ dependencies = [
 [[package]]
 name = "graph-neighbor-matching"
 version = "0.5.0"
-source = "git+https://github.com/mneumann/graph-neighbor-matching#4113b90147f1d40388853eaf0de479248d95a056"
+source = "git+https://github.com/mneumann/graph-neighbor-matching#c1bd54a35446bc063652b41693197e5ecdba25ee"
 dependencies = [
  "closed01 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "munkres 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -147,7 +147,7 @@ dependencies = [
 [[package]]
 name = "rayon"
 version = "0.4.0"
-source = "git+https://github.com/nikomatsakis/rayon#0f393ad80bbbd920275a72f695246b80f40a295f"
+source = "git+https://github.com/nikomatsakis/rayon#40a6f0f5fb180824749c0bd3810ff3eec3014118"
 dependencies = [
  "deque 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
