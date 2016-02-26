@@ -102,7 +102,8 @@ fn test_distribute_interval() {
     assert_eq!(None, iter.next());
 }
 
-fn genome_to_graph(genome: &Genome<Node>, node_count: &NodeCount) -> OwnedGraph<Neuron> {
+
+fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     let mut substrate = Substrate::new();
 
     let mut y_iter = DistributeIntervalIter::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
@@ -131,6 +132,11 @@ fn genome_to_graph(genome: &Genome<Node>, node_count: &NodeCount) -> OwnedGraph<
         }
     }
 
+    return substrate;
+}
+
+fn genome_to_graph(genome: &Genome<Node>, node_count: &NodeCount) -> OwnedGraph<Neuron> {
+    let substrate = generate_substrate(node_count);
     let mut cppn = Cppn::new(genome.network());
 
     // now develop the cppn. the result is a graph
