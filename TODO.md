@@ -1,4 +1,4 @@
-- [ ] Display the target graph and found graph as dot.
+- [x] Display the target graph and found graph as dot.
 - [ ] Automatic selection of a good `compatibility_threshold` by sampling
       the population. Split into `n` niches.
 - [ ] Use configuration file for most parameter settings.

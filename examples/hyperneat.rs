@@ -164,7 +164,7 @@ struct FitnessEvaluator {
 impl FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &Genome<Node>) -> f32 {
-        self.sim.fitness(genome_to_graph(genome, &self.node_count))
+        self.sim.fitness(&genome_to_graph(genome, &self.node_count))
     }
 }
 
@@ -271,6 +271,8 @@ fn main() {
                                      },
                                      &mut rng);
 
+    let final_pop = new_pop.sort();
+
     println!("iter: {}", iter);
-    println!("{:#?}", new_pop.best_individual());
+    println!("{:#?}", final_pop.best_individual());
 }

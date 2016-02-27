@@ -24,6 +24,8 @@ pub struct Configuration {
     elite_percentage: Closed01<f64>,
     selection_percentage: Closed01<f64>,
     compatibility_threshold: f64,
+
+    stop_after_iterations: usize,
 }
 
 fn conv_bool(s: &str) -> bool {
@@ -89,6 +91,8 @@ impl Configuration {
             selection_percentage: Closed01::new(0.20),
             compatibility_threshold: 1.0,
 
+            stop_after_iterations: 100,
+
             target_graph_file: None,
         }
     }
@@ -127,6 +131,8 @@ impl Configuration {
             cfg.compatibility_threshold = val;
         }
 
+        if let Some(val) = parse_uint(&map, "stop_after_iterations") { cfg.stop_after_iterations = val as usize; }
+
         if let Some(val) = parse_string(&map, "target_graph_file") { cfg.target_graph_file = Some(val); }
 
         cfg
@@ -158,7 +164,7 @@ impl Configuration {
     }
 
     pub fn stop_after_iters(&self) -> usize {
-        100
+        self.stop_after_iterations
     }
 
     pub fn stop_if_fitness_better_than(&self) -> f64 {

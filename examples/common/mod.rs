@@ -1,12 +1,11 @@
 use std::fs::File;
 use std::io::Read;
 use std::fmt::Debug;
-use graph_neighbor_matching::NodeColorMatching;
+use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm, WeightedNodeColors, NodeColorWeight};
 use graph_neighbor_matching::graph::OwnedGraph;
 use graph_neighbor_matching::{Graph, Edges};
 use neat::genomes::acyclic_network::NodeType;
 use graph_io_gml::parse_gml;
-use graph_neighbor_matching::{SimilarityMatrix, ScoreNorm};
 use asexp::Sexp;
 use petgraph::Directed;
 use petgraph::Graph as PetGraph;
@@ -80,25 +79,13 @@ pub fn to_gml<W: Write>(wr: &mut W, graph: &OwnedGraph<Neuron>) -> io::Result<()
     try!(writeln!(wr, "  directed 1"));
 
     for nidx in 0..graph.num_nodes() {
-        let node_type = 
-            match graph.node_value(nidx) {
-                &Neuron::Input => {
-                    "input"
-                }
-                &Neuron::Output => {
-                    "output"
-                }
-                &Neuron::Hidden => {
-                    "hidden"
-                }
-            };
-
-        try!(writeln!(wr, "  node [id {} weight \"{}\"]", nidx, node_type));
+        let node_type: f32 = graph.node_value(nidx).node_color_weight();
+        try!(writeln!(wr, "  node [id {} weight {:.1}]", nidx, node_type));
     }
     for nidx in 0..graph.num_nodes() {
         let edges = graph.out_edges_of(nidx);
         for eidx in 0..edges.num_edges() {
-            try!(writeln!(wr, "  edge [source {} target {} weight {}]", nidx, edges.nth_edge(eidx).unwrap(), edges.nth_edge_weight(eidx).unwrap().get()));
+            try!(writeln!(wr, "  edge [source {} target {} weight {:.2}]", nidx, edges.nth_edge(eidx).unwrap(), edges.nth_edge_weight(eidx).unwrap().get()));
         }
     }
     try!(writeln!(wr, "]"));
@@ -145,6 +132,16 @@ pub enum Neuron {
     Hidden,
 }
 
+impl NodeColorWeight for Neuron {
+    fn node_color_weight(&self) -> f32 {
+        match *self { 
+            Neuron::Input => 0.0,
+            Neuron::Hidden => 1.0,
+            Neuron::Output => 2.0,
+        }
+    }
+}
+
 impl NodeType for Neuron {
     fn accept_incoming_links(&self) -> bool {
         match *self {
@@ -170,31 +167,6 @@ pub fn convert_neuron_from_str(s: &str) -> Neuron {
 }
 
 #[derive(Debug)]
-pub struct NodeColors;
-
-impl NodeColorMatching<Neuron> for NodeColors {
-    fn node_color_matching(&self,
-                           node_i_value: &Neuron,
-                           node_j_value: &Neuron)
-                           -> Closed01<f32> {
-
-        // Treat nodes as equal regardless of their activation function or input/output number.
-        let eq = match (node_i_value, node_j_value) {
-            (&Neuron::Input, &Neuron::Input) => true,
-            (&Neuron::Output, &Neuron::Output) => true,
-            (&Neuron::Hidden, &Neuron::Hidden) => true,
-            _ => false,
-        };
-
-        if eq {
-            Closed01::one()
-        } else {
-            Closed01::zero()
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct GraphSimilarity {
     pub target_graph: OwnedGraph<Neuron>,
     pub edge_score: bool,
@@ -204,8 +176,8 @@ pub struct GraphSimilarity {
 
 impl GraphSimilarity {
     // A larger fitness means "better"
-    pub fn fitness(&self, graph: OwnedGraph<Neuron>) -> f32 {
-        let mut s = SimilarityMatrix::new(&graph, &self.target_graph, NodeColors);
+    pub fn fitness(&self, graph: &OwnedGraph<Neuron>) -> f32 {
+        let mut s = SimilarityMatrix::new(graph, &self.target_graph, WeightedNodeColors);
         s.iterate(self.iters, self.eps);
         let assignment = s.optimal_node_assignment();
         if self.edge_score {

@@ -4,7 +4,6 @@ use rand::Rng;
 use closed01::Closed01;
 use super::traits::Mate;
 use std::marker::PhantomData;
-use std::num::Zero;
 use std::fmt::Debug;
 use std::cmp;
 use std::mem;

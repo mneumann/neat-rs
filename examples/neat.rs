@@ -43,7 +43,7 @@ struct FitnessEvaluator {
 impl FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &Genome<Neuron>) -> f32 {
-        self.sim.fitness(genome_to_graph(genome))
+        self.sim.fitness(&genome_to_graph(genome))
     }
 }
 
@@ -133,16 +133,24 @@ fn main() {
 
     let max_iters = cfg.stop_after_iters();
     let good_fitness = cfg.stop_if_fitness_better_than();
-    let (iter, new_pop) = runner.run(initial_pop,
+    let (_iter, new_pop) = runner.run(initial_pop,
                                      &|iter, pop| {
+                                         println!("iter: {}: best fitness: {:.3}", iter, pop.best_individual().unwrap().fitness().get());
                                          iter >= max_iters || pop.best_individual().unwrap().fitness().get() > good_fitness
                                      },
                                      &mut rng);
 
-    println!("iter: {}", iter);
-    let best = new_pop.best_individual().unwrap();
-    println!("{:#?}", best);
+    let final_pop = new_pop.sort();
 
-    info!("Writing best.gml");
-    write_gml("best.gml", &genome_to_graph(best.genome()));
+    {
+        let best = final_pop.best_individual().unwrap();
+        write_gml("best.gml", &genome_to_graph(best.genome()));
+    }
+
+    for (i, ind) in final_pop.into_iter().enumerate() {
+        println!("individual #{}: {:.3}", i, ind.fitness().get());
+        write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &genome_to_graph(ind.genome()));
+    }
+
+    write_gml("target.gml", &fitness_evaluator.sim.target_graph);
 }
