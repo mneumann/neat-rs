@@ -13,13 +13,13 @@ use super::prob::probabilistic_round;
 
 #[derive(Debug)]
 pub struct Individual<T: Debug + Genotype> {
-    fitness: Fitness,
+    fitness: Option<Fitness>,
     genome: Box<T>,
 }
 
 impl<T: Debug + Genotype> Individual<T> {
     pub fn fitness(&self) -> Fitness {
-        self.fitness
+        self.fitness.unwrap()
     }
 
     pub fn genome(&self) -> &T {
@@ -141,17 +141,17 @@ impl<T: Genotype + Debug, R: Rating> Population<T, R> {
 impl<T: Genotype + Debug> Population<T, Unrated> {
     pub fn add_genome(&mut self, genome: Box<T>) {
         self.individuals.push(Individual {
-            fitness: Zero::zero(),
+            fitness: None,
             genome: genome,
         });
     }
 
-    pub fn rate<F>(mut self, f: &F) -> Population<T, Rated>
+    pub fn rate_seq<F>(mut self, f: &F) -> Population<T, Rated>
         where F: Fn(&T) -> Fitness
     {
         for ind in self.individuals.iter_mut() {
             let fitness = f(&ind.genome);
-            ind.fitness = fitness;
+            ind.fitness = Some(fitness);
         }
         Population {
             individuals: self.individuals,
@@ -164,7 +164,7 @@ impl<T: Genotype + Debug> Population<T, Unrated> {
     {
         self.individuals.par_iter_mut().for_each(|ind| {
             let fitness = f(&ind.genome);
-            ind.fitness = fitness;
+            ind.fitness = Some(fitness);
         });
 
         Population {
@@ -176,12 +176,17 @@ impl<T: Genotype + Debug> Population<T, Unrated> {
 
 impl<T: Genotype + Debug, R: IsRated> Population<T, R> {
     fn mean_fitness(&self) -> Fitness {
-        let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness).sum();
+        let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness()).sum();
         sum / Fitness::new(self.len() as f64)
     }
 }
 
 impl<T: Genotype + Debug> Population<T, RatedSorted> {
+
+    pub fn into_iter(self) -> ::std::vec::IntoIter<Individual<T>> {
+        self.individuals.into_iter()
+    }
+
     pub fn best_individual(&self) -> Option<&Individual<T>> {
         self.individuals.first()
     }
@@ -246,7 +251,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
 
     // higher value of fitness means that the individual is fitter.
     pub fn sort(mut self) -> Population<T, RatedSorted> {
-        (&mut self.individuals).sort_by(|a, b| a.fitness.cmp(&b.fitness).reverse());
+        (&mut self.individuals).sort_by(|a, b| a.fitness().cmp(&b.fitness()).reverse());
         Population {
             individuals: self.individuals,
             _marker: PhantomData,
@@ -254,7 +259,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     }
 
     pub fn best_individual(&self) -> Option<&Individual<T>> {
-        self.individuals.iter().max_by_key(|ind| ind.fitness)
+        self.individuals.iter().max_by_key(|ind| ind.fitness())
     }
 
     /// Merge `self` with the first `n` individuals from population `other`.
