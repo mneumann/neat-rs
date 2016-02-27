@@ -5,6 +5,7 @@ extern crate rayon;
 #[macro_use]
 extern crate log;
 extern crate acyclic_network;
+extern crate closed01;
 
 pub mod traits;
 pub mod innovation;

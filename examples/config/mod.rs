@@ -4,11 +4,11 @@ use neat::mutate::MutateMethodWeighting;
 use neat::weight::{WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 use neat::genomes::acyclic_network::GenomeDistance;
-use rand::Closed01;
 use asexp::Sexp;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
+use closed01::Closed01;
 
 #[derive(Debug)]
 pub struct Configuration {
@@ -20,6 +20,10 @@ pub struct Configuration {
     w_add_node: u32,
     w_add_connection: u32,
     w_delete_connection: u32,
+
+    elite_percentage: Closed01<f64>,
+    selection_percentage: Closed01<f64>,
+    compatibility_threshold: f64,
 }
 
 fn conv_bool(s: &str) -> bool {
@@ -41,6 +45,14 @@ fn parse_bool(map: &BTreeMap<String, Sexp>, key: &str) -> Option<bool> {
 fn parse_uint(map: &BTreeMap<String, Sexp>, key: &str) -> Option<u64> {
     if map.contains_key(key) {
         Some(map[key].get_uint().unwrap())
+    } else {
+        None
+    }
+}
+
+fn parse_float(map: &BTreeMap<String, Sexp>, key: &str) -> Option<f64> {
+    if map.contains_key(key) {
+        Some(map[key].get_float().unwrap())
     } else {
         None
     }
@@ -73,6 +85,10 @@ impl Configuration {
             w_add_connection: 10,
             w_delete_connection: 1,
 
+            elite_percentage: Closed01::new(0.05),
+            selection_percentage: Closed01::new(0.20),
+            compatibility_threshold: 1.0,
+
             target_graph_file: None,
         }
     }
@@ -96,6 +112,21 @@ impl Configuration {
         if let Some(val) = parse_uint(&map, "w_add_connection") { cfg.w_add_connection = val as u32; }
         if let Some(val) = parse_uint(&map, "w_delete_connection") { cfg.w_delete_connection = val as u32; }
 
+        if let Some(val) = parse_float(&map, "elite_percentage") {
+            assert!(val >= 0.0 && val <= 100.0);
+            cfg.elite_percentage = Closed01::new(val / 100.0);
+        }
+
+        if let Some(val) = parse_float(&map, "selection_percentage") {
+            assert!(val >= 0.0 && val <= 100.0);
+            cfg.selection_percentage = Closed01::new(val / 100.0);
+        }
+
+        if let Some(val) = parse_float(&map, "compatibility_threshold") {
+            assert!(val >= 0.0);
+            cfg.compatibility_threshold = val;
+        }
+
         if let Some(val) = parse_string(&map, "target_graph_file") { cfg.target_graph_file = Some(val); }
 
         cfg
@@ -115,15 +146,15 @@ impl Configuration {
     }
 
     pub fn elite_percentage(&self) -> Closed01<f64> {
-        Closed01(0.05)
+        self.elite_percentage
     }
 
     pub fn selection_percentage(&self) -> Closed01<f64> {
-        Closed01(0.2)
+        self.selection_percentage
     }
 
     pub fn compatibility_threshold(&self) -> f64 {
-        1.0
+        self.compatibility_threshold
     }
 
     pub fn stop_after_iters(&self) -> usize {

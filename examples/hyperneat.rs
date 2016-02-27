@@ -25,6 +25,7 @@ use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
 use cppn::position::Position2d;
 use neat::weight::{Weight, WeightRange};
+use closed01::Closed01;
 
 type Node = CppnNode<BipolarActivationFunction>;
 
@@ -148,7 +149,7 @@ fn genome_to_graph(genome: &Genome<Node>, node_count: &NodeCount) -> OwnedGraph<
         if link.weight >= 0.0 && link.weight <= 1.0 {
             builder.add_edge(link.source_idx,
                              link.target_idx,
-                             closed01::Closed01::new(link.weight as f32));
+                             Closed01::new(link.weight as f32));
         }
     }
     return builder.graph();

@@ -1,6 +1,7 @@
 use super::fitness::Fitness;
 use super::traits::{Genotype, Distance};
-use rand::{Rng, Closed01};
+use rand::Rng;
+use closed01::Closed01;
 use super::traits::Mate;
 use std::marker::PhantomData;
 use std::num::Zero;
@@ -295,7 +296,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     {
         debug!("population size: {}", self.len());
 
-        assert!(elite_percentage.0 <= selection_percentage.0); // XXX
+        assert!(elite_percentage <= selection_percentage); // XXX
         assert!(self.len() > 0);
         let niches = self.partition(rng, compatibility_threshold, compatibility);
         let num_niches = niches.len();
@@ -326,15 +327,15 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             // number of elitary individuals to copy from the old niche generation into the new.
             let elite_size =
                 cmp::max(1,
-                         probabilistic_round(niche_size * elite_percentage.0, rng) as usize);
+                         probabilistic_round(niche_size * elite_percentage.get(), rng) as usize);
 
             // number of offspring to produce.
-            let offspring_size = probabilistic_round(niche_size * (1.0 - elite_percentage.0),
+            let offspring_size = probabilistic_round(niche_size * (1.0 - elite_percentage.get()),
                                                      rng) as usize;
 
             // number of the best individuals to use for mating.
             let select_size = probabilistic_round(niche_size *
-                                                  selection_percentage.0,
+                                                  selection_percentage.get(),
                                                   rng) as usize;
 
             let sorted_niche = niche.sort();
@@ -418,8 +419,8 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
         while !goal_condition(iteration, &current_rated_pop) {
             let (new_rated, new_unrated) =
                 current_rated_pop.reproduce(self.pop_size,
-                                            Closed01(self.elite_percentage.0),
-                                            Closed01(self.selection_percentage.0),
+                                            self.elite_percentage,
+                                            self.selection_percentage,
                                             self.compatibility_threshold,
                                             self.compatibility,
                                             self.mate,

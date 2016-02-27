@@ -18,6 +18,7 @@ use rand::Rng;
 use std::marker::PhantomData;
 use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml};
 use neat::weight::{Weight, WeightRange};
+use closed01::Closed01;
 
 fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
     let mut builder = GraphBuilder::new();
@@ -28,7 +29,7 @@ fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
     });
 
     genome.visit_active_links(|src_id, target_id, weight| {
-        builder.add_edge(src_id, target_id, closed01::Closed01::new(weight.into()));
+        builder.add_edge(src_id, target_id, Closed01::new(weight.into()));
     });
 
     return builder.graph();
