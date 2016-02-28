@@ -26,94 +26,20 @@ use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
 use cppn::position::Position2d;
 use neat::weight::{Weight, WeightRange};
+use neat::distribute::DistributeInterval;
 use closed01::Closed01;
 
 type Node = CppnNode<BipolarActivationFunction>;
 
-
-/// Distribute n points equally within the interval [left, right]
-
-struct DistributeIntervalIter {
-    n: usize,
-    i: usize,
-    left: f64,
-    right: f64,
-}
-
-impl DistributeIntervalIter {
-    fn new(n: usize, left: f64, right: f64) -> Self {
-        assert!(left <= right);
-        DistributeIntervalIter {
-            n: n,
-            i: 0,
-            left: left,
-            right: right,
-        }
-    }
-}
-
-impl Iterator for DistributeIntervalIter {
-    type Item = f64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.i >= self.n {
-            return None;
-        }
-
-        debug_assert!(self.n > 0);
-
-        let width = self.right - self.left;
-        let step = width / self.n as f64;
-        let start = self.left + (step / 2.0);
-
-        let new = start + (self.i as f64) * step;
-        self.i += 1;
-
-        return Some(new);
-    }
-}
-
-#[test]
-fn test_distribute_interval() {
-    let mut iter = DistributeIntervalIter::new(0, -1.0, 1.0);
-    assert_eq!(None, iter.next());
-
-    let mut iter = DistributeIntervalIter::new(1, -1.0, 1.0);
-    assert_eq!(Some(0.0), iter.next());
-    assert_eq!(None, iter.next());
-
-    let mut iter = DistributeIntervalIter::new(3, -1.0, 1.0);
-    assert_eq!(-66, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(0, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(66, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(None, iter.next());
-
-    let mut iter = DistributeIntervalIter::new(4, -1.0, 1.0);
-    assert_eq!(-75, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(-25, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(25, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(75, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(None, iter.next());
-
-    let mut iter = DistributeIntervalIter::new(5, -1.0, 1.0);
-    assert_eq!(-80, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(-40, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(0, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(40, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(80, (iter.next().unwrap() * 100.0) as usize);
-    assert_eq!(None, iter.next());
-}
-
-
 fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     let mut substrate = Substrate::new();
 
-    let mut y_iter = DistributeIntervalIter::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
+    let mut y_iter = DistributeInterval::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
 
     // Inputs
     {
         let y = y_iter.next().unwrap();
-        for x in DistributeIntervalIter::new(node_count.inputs, -1.0, 1.0) {
+        for x in DistributeInterval::new(node_count.inputs, -1.0, 1.0) {
             substrate.add_node(Position2d::new(x, y), Neuron::Input);
         }
     }
@@ -121,7 +47,7 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     // Hidden
     {
         let y = y_iter.next().unwrap();
-        for x in DistributeIntervalIter::new(node_count.hidden, -1.0, 1.0) {
+        for x in DistributeInterval::new(node_count.hidden, -1.0, 1.0) {
             substrate.add_node(Position2d::new(x, y), Neuron::Hidden);
         }
     }
@@ -129,7 +55,7 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     // Outputs
     {
         let y = y_iter.next().unwrap();
-        for x in DistributeIntervalIter::new(node_count.outputs, -1.0, 1.0) {
+        for x in DistributeInterval::new(node_count.outputs, -1.0, 1.0) {
             substrate.add_node(Position2d::new(x, y), Neuron::Output);
         }
     }

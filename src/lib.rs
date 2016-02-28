@@ -19,3 +19,4 @@ pub mod prob;
 pub mod crossover;
 pub mod genomes;
 pub mod weight;
+pub mod distribute;
