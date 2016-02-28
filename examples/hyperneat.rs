@@ -8,6 +8,7 @@ extern crate cppn;
 extern crate asexp;
 #[macro_use]
 extern crate log;
+extern crate env_logger;
 
 mod common;
 mod config;
@@ -191,6 +192,8 @@ impl ElementStrategy<Node> for ES {
 }
 
 fn main() {
+    env_logger::init().unwrap();
+
     let mut rng = rand::thread_rng();
 
     let cfg = config::Configuration::from_file();
