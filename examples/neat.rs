@@ -155,11 +155,12 @@ fn main() {
 
     {
         let best = final_pop.best_individual().unwrap();
+        println!("best fitness: {:.3}", best.fitness().get());
         write_gml("best.gml", &genome_to_graph(best.genome()));
     }
 
     for (i, ind) in final_pop.into_iter().enumerate() {
-        println!("individual #{}: {:.3}", i, ind.fitness().get());
+        //println!("individual #{}: {:.3}", i, ind.fitness().get());
         write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &genome_to_graph(ind.genome()));
     }
 

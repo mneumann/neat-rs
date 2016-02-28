@@ -87,7 +87,7 @@ impl Configuration {
             mutate_method_weighting: MutateMethodWeighting {
                 w_modify_weight: 100,
                 w_add_connection: 10,
-                w_enable_connection: 10,
+                w_enable_connection: 1,
                 w_delete_connection: 1,
                 w_add_node: 1,
             },
