@@ -13,7 +13,7 @@ extern crate env_logger;
 mod common;
 mod config;
 
-use neat::population::{Population, Unrated, Runner};
+use neat::population::{Population, Unrated, NicheRunner};
 use neat::traits::FitnessEval;
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater,
                                      ElementStrategy};
@@ -21,7 +21,7 @@ use neat::fitness::Fitness;
 use graph_neighbor_matching::graph::{GraphBuilder, OwnedGraph};
 use rand::Rng;
 use std::marker::PhantomData;
-use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount};
+use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml};
 use cppn::cppn::{Cppn, CppnNode};
 use cppn::bipolar::BipolarActivationFunction;
 use cppn::substrate::Substrate;
@@ -64,24 +64,6 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     return substrate;
 }
 
-fn genome_to_graph(genome: &Genome<Node>, node_count: &NodeCount) -> OwnedGraph<Neuron> {
-    let substrate = generate_substrate(node_count);
-    let mut cppn = Cppn::new(genome.network());
-
-    // now develop the cppn. the result is a graph
-    let mut builder = GraphBuilder::new();
-    for (i, node) in substrate.nodes().iter().enumerate() {
-        let _ = builder.add_node(i, node.node_type.clone());
-    }
-    for link in substrate.iter_links(&mut cppn, None) {
-        if link.weight >= 0.0 && link.weight <= 1.0 {
-            builder.add_edge(link.source_idx,
-                             link.target_idx,
-                             Closed01::new(link.weight as f32));
-        }
-    }
-    return builder.graph();
-}
 
 #[derive(Debug)]
 struct FitnessEvaluator {
@@ -89,10 +71,31 @@ struct FitnessEvaluator {
     node_count: NodeCount,
 }
 
+impl FitnessEvaluator {
+    fn genome_to_graph(&self, genome: &Genome<Node>) -> OwnedGraph<Neuron> {
+        let substrate = generate_substrate(&self.node_count);
+        let mut cppn = Cppn::new(genome.network());
+
+        // now develop the cppn. the result is a graph
+        let mut builder = GraphBuilder::new();
+        for (i, node) in substrate.nodes().iter().enumerate() {
+            let _ = builder.add_node(i, node.node_type.clone());
+        }
+        for link in substrate.iter_links(&mut cppn, None) {
+            if link.weight >= 0.0 && link.weight <= 1.0 {
+                builder.add_edge(link.source_idx,
+                                 link.target_idx,
+                                 Closed01::new(link.weight as f32));
+            }
+        }
+        return builder.graph();
+    }
+}
+
 impl FitnessEval<Genome<Node>> for FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &Genome<Node>) -> Fitness {
-        Fitness::new(self.sim.fitness(&genome_to_graph(genome, &self.node_count)) as f64)
+        Fitness::new(self.sim.fitness(&self.genome_to_graph(genome)) as f64)
     }
 }
 
@@ -104,7 +107,7 @@ impl ElementStrategy<Node> for ES {
     }
 
     fn full_link_weight(&self) -> Weight {
-        WeightRange::bipolar(1.0).high()
+        self.link_weight_range().high()
     }
 
     fn random_node_type<R: Rng>(&self, rng: &mut R) -> Node {
@@ -180,29 +183,44 @@ fn main() {
         _n: PhantomData,
     };
 
-    let mut runner = Runner {
-        pop_size: cfg.population_size(),
-        elite_percentage: cfg.elite_percentage(),
-        selection_percentage: cfg.selection_percentage(),
-        compatibility_threshold: cfg.compatibility_threshold(),
-        compatibility: cfg.genome_compatibility(),
-        mate: &mut mater,
-        fitness: &fitness_evaluator,
-        _marker: PhantomData,
-    };
+    let mut niche_runner = NicheRunner::new(&fitness_evaluator);
 
-    let max_iters = cfg.stop_after_iters();
-    let good_fitness = cfg.stop_if_fitness_better_than();
-    let (iter, new_pop) = runner.run(initial_pop,
-                                     &|iter, pop, _| {
-                                         iter >= max_iters ||
-                                         pop.best_individual().unwrap().fitness().get() >
-                                         good_fitness
-                                     },
-                                     &mut rng);
+    niche_runner.add_unrated_population_as_niche(initial_pop);
 
-    let final_pop = new_pop.sort();
+    while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
+        println!("iteration: {}", niche_runner.current_iteration());
 
-    println!("iter: {}", iter);
-    println!("{:#?}", final_pop.best_individual());
+        let best_fitness = niche_runner.best_individual().fitness().get();;
+        println!("best fitness: {:2}", best_fitness); 
+        println!("num individuals: {}", niche_runner.num_individuals());
+
+        if best_fitness > cfg.stop_if_fitness_better_than() {
+            println!("Premature abort.");
+            break;
+        }
+
+        // partition into n niches.
+        niche_runner.partition_n_sorted(5, cfg.genome_compatibility(), &mut rng);
+        println!("partitioned into num niches: {}", niche_runner.num_niches());
+
+        niche_runner.reproduce_global(cfg.population_size(),
+                                      cfg.elite_percentage(),
+                                      cfg.selection_percentage(),
+                                      &mut mater,
+                                      &mut rng);
+    }
+
+    let final_pop = niche_runner.into_population().sort();
+
+    {
+        let best = final_pop.best_individual().unwrap();
+        write_gml("best.gml", &fitness_evaluator.genome_to_graph(best.genome()));
+    }
+
+    for (i, ind) in final_pop.into_iter().enumerate() {
+        println!("individual #{}: {:.3}", i, ind.fitness().get());
+        write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &fitness_evaluator.genome_to_graph(ind.genome()));
+    }
+
+    write_gml("target.gml", &fitness_evaluator.sim.target_graph);
 }
