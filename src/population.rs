@@ -78,9 +78,15 @@ impl<T: Genotype + Debug> Niches<T> {
         self.niches.iter().map(|ind| ind.mean_fitness()).sum()
     }
 
+    /// Total number of individuals
+
+    pub fn num_individuals(&self) -> usize {
+        self.total_individuals
+    }
+
     /// Number of niches
 
-    pub fn len(&self) -> usize {
+    pub fn num_niches(&self) -> usize {
         self.niches.len()
     }
 
@@ -114,6 +120,56 @@ impl<T: Genotype + Debug> Niches<T> {
         let mut new_niche = Population::new();
         new_niche.add_individual(ind);
         self.niches.push(new_niche);
+    }
+
+    /// Reproduce individuals of all niches. Each niche is allowed to reproduce a number of
+    /// individuals relative to it's performance to other niches.
+
+    pub fn reproduce<M, R>(self,
+                              new_pop_size: usize,
+                              // how many of the best individuals of a niche are copied as-is into the
+                              // new population?
+                              elite_percentage: Closed01<f64>,
+                              // how many of the best individuals of a niche are selected for
+                              // reproduction?
+                              selection_percentage: Closed01<f64>,
+                              mate: &mut M,
+                              rng: &mut R)
+                              -> (Population<T, Rated>, Population<T, Unrated>)
+        where M: Mate<T>,
+              R: Rng
+    {
+        assert!(self.num_individuals() > 0);
+        assert!(self.num_niches() > 0);
+        assert!(elite_percentage <= selection_percentage); // XXX
+
+        let num_niches = self.num_niches();
+        let total_mean = self.total_mean();
+
+        assert!(total_mean.get() >= 0.0);
+
+        let mut new_unrated_population: Population<T, Unrated> = Population::new();
+        let mut new_rated_population: Population<T, Rated> = Population::new();
+
+        for niche in self.into_iter() {
+            let percentage_of_population: f64 = if total_mean.get() == 0.0 {
+                // all individuals have a fitness of 0.0.
+                // we will equally allow each niche to procude offspring.
+                1.0 / (num_niches as f64)
+            } else {
+                (niche.mean_fitness() / total_mean).get()
+            };
+
+            // calculate new size of niche, and size of elites, and selection size.
+            assert!(percentage_of_population >= 0.0 && percentage_of_population <= 1.0);
+
+            let niche_size = new_pop_size as f64 * percentage_of_population;
+
+            niche.reproduce(niche_size, elite_percentage, selection_percentage, mate,
+                            &mut new_unrated_population, &mut new_rated_population, rng);
+        }
+
+        return (new_rated_population, new_unrated_population);
     }
 }
 
@@ -271,95 +327,56 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         self.individuals.extend(other.individuals.into_iter());
     }
 
-    // We want to create a population of approximately `pop_size`. We do not care if there are
-    // slightly more or slightly less individuals than that.
-    //
-    // 1. sort whole popluation into niches
-    // 2. calculate the number of offspring for each niche.
-    // 3. each niche produces offspring.
-    //    - sort each niche according to the fitness value.
-    //    - r% of the best genomes produce offspring
-    //    - determine the elitist size. those are always copied into the new generation.
-    //
-    pub fn reproduce<C, M, R>(self,
-                              pop_size: usize,
-                              // how many of the best individuals of a niche are copied as-is into the
+    /// Reproduce a population without niching. Use partition() and `Niches#reproduce()` for
+    /// niching.
+    ///
+    /// We first sort the population according to it's fitness values.
+    /// Then, `selection_percentage` of the best genomes are allowed to mate and produce offspring.
+    /// Then, `elite_percentage` of the best genomes is always copied into the new generation.
+
+    pub fn reproduce<M, R>(self,
+                              // The expected size of the new population
+                              new_pop_size: f64,
+                              // how many of the best individuals of a population are copied as-is into the
                               // new population?
                               elite_percentage: Closed01<f64>,
-                              // how many of the best individuals of a niche are selected for
+                              // how many of the best individuals of a populatiion are selected for
                               // reproduction?
                               selection_percentage: Closed01<f64>,
-                              compatibility_threshold: f64,
-                              compatibility: &C,
                               mate: &mut M,
+                              new_unrated_population: &mut Population<T, Unrated>,
+                              new_rated_population: &mut Population<T, Rated>,
                               rng: &mut R)
-                              -> (Population<T, Rated>, Population<T, Unrated>)
-        where R: Rng,
-              C: Distance<T>,
-              M: Mate<T>
+        where M: Mate<T>,
+              R: Rng
     {
-        debug!("population size: {}", self.len());
+        // number of elitary individuals to copy from the old generation into the new.
+        let elite_size =
+            cmp::max(1,
+                     probabilistic_round(new_pop_size * elite_percentage.get(), rng) as usize);
 
-        assert!(elite_percentage <= selection_percentage); // XXX
-        assert!(self.len() > 0);
-        let niches = self.partition(rng, compatibility_threshold, compatibility);
-        let num_niches = niches.len();
+        // number of offspring to produce.
+        let offspring_size = probabilistic_round(new_pop_size * elite_percentage.inv().get(),
+                                                 rng) as usize;
 
-        debug!("number of niches: {}", num_niches);
+        // number of the best individuals to use for mating.
+        let select_size = cmp::min(self.len(), probabilistic_round(new_pop_size *
+                                              selection_percentage.get(),
+                                              rng) as usize);
 
-        assert!(num_niches > 0);
-        let total_mean = niches.total_mean();
-        assert!(total_mean.get() >= 0.0);
+        let sorted_pop = self.sort();
 
-        let mut new_unrated_population: Population<T, Unrated> = Population::new();
-        let mut new_rated_population: Population<T, Rated> = Population::new();
-
-        for niche in niches.into_iter() {
-            let percentage_of_population: f64 = if total_mean.get() == 0.0 {
-                // all individuals have a fitness of 0.0.
-                // we will equally allow each niche to procude offspring.
-                1.0 / (num_niches as f64)
-            } else {
-                (niche.mean_fitness() / total_mean).get()
-            };
-
-            // calculate new size of niche, and size of elites, and selection size.
-            assert!(percentage_of_population >= 0.0 && percentage_of_population <= 1.0);
-
-            let niche_size = pop_size as f64 * percentage_of_population;
-
-            // number of elitary individuals to copy from the old niche generation into the new.
-            let elite_size =
-                cmp::max(1,
-                         probabilistic_round(niche_size * elite_percentage.get(), rng) as usize);
-
-            // number of offspring to produce.
-            let offspring_size = probabilistic_round(niche_size * (1.0 - elite_percentage.get()),
-                                                     rng) as usize;
-
-            // number of the best individuals to use for mating.
-            let select_size = probabilistic_round(niche_size *
-                                                  selection_percentage.get(),
-                                                  rng) as usize;
-
-            let sorted_niche = niche.sort();
-
-            let select_size = cmp::min(select_size, sorted_niche.len());
-
-            // at first produce `offspring_size` individuals from the top `select_size`
-            // individuals.
-            if select_size > 0 {
-                for _ in 0..offspring_size {
-                    let offspring = sorted_niche.create_single_offspring(select_size, mate, rng);
-                    new_unrated_population.add_genome(Box::new(offspring));
-                }
+        // at first produce `offspring_size` individuals from the top `select_size`
+        // individuals.
+        if select_size > 0 {
+            for _ in 0..offspring_size {
+                let offspring = sorted_pop.create_single_offspring(select_size, mate, rng);
+                new_unrated_population.add_genome(Box::new(offspring));
             }
-
-            // now copy the elites
-            new_rated_population.merge(sorted_niche, elite_size);
         }
 
-        return (new_rated_population, new_unrated_population);
+        // then copy the elites
+        new_rated_population.merge(sorted_pop, elite_size);
     }
 
     /// Partition the whole population into species (niches)
@@ -421,12 +438,10 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
         let mut current_rated_pop = initial_pop.rate_par(self.fitness);
 
         while !goal_condition(iteration, &current_rated_pop) {
-            let (new_rated, new_unrated) =
-                current_rated_pop.reproduce(self.pop_size,
+            let niches = current_rated_pop.partition(rng, self.compatibility_threshold, self.compatibility);
+            let (new_rated, new_unrated) = niches.reproduce(self.pop_size,
                                             self.elite_percentage,
                                             self.selection_percentage,
-                                            self.compatibility_threshold,
-                                            self.compatibility,
                                             self.mate,
                                             rng);
 
