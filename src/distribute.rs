@@ -71,4 +71,16 @@ fn test_distribute_interval() {
     assert_eq!(40, (iter.next().unwrap() * 100.0) as isize);
     assert_eq!(80, (iter.next().unwrap() * 100.0) as isize);
     assert_eq!(None, iter.next());
+
+    let mut iter = DistributeInterval::new(3, 0.0, 8.0);
+    assert_eq!(1, iter.next().unwrap() as usize);
+    assert_eq!(4, iter.next().unwrap() as usize);
+    assert_eq!(6, iter.next().unwrap() as usize);
+    assert_eq!(None, iter.next());
+
+    let mut iter = DistributeInterval::new(3, 0.0, 9.0);
+    assert_eq!(1, iter.next().unwrap() as usize);
+    assert_eq!(4, iter.next().unwrap() as usize);
+    assert_eq!(7, iter.next().unwrap() as usize);
+    assert_eq!(None, iter.next());
 }
