@@ -557,6 +557,8 @@ impl<T: Genotype + Debug> Population<T, Rated> {
 
         assert!(n > 1 && n <= self.len());
 
+        let max_size_per_niche = cmp::max(2, (self.len() * 2) / n);
+
         // We distribute `n` points within the internal (0..len).
         // Then around each point, we select a random individual as centroid.
         let distribute = DistributeInterval::new(n, 0.0, self.len() as f64);
@@ -591,28 +593,43 @@ impl<T: Genotype + Debug> Population<T, Rated> {
             sorted.individuals
                   .iter()
                   .map(|ind| {
-                      let mut best_niche = 0;
-                      let mut best_dist =
-                          compatibility.distance(&sorted.individuals[niche_centroids[best_niche]]
-                                                      .genome,
-                                                 &ind.genome);
+                      let mut best_niche = None;
+
                       // test all other niches
-                      for i in 1..n {
-                          // XXX: Only test niche if it isn't full yet!
+                      for i in 0..n {
+
+                          // Only test niche if it isn't full yet!
+                          if niche_sizes[i] > max_size_per_niche {
+                              continue;
+                          }
+
                           let dist =
                               compatibility.distance(&sorted.individuals[niche_centroids[i]]
                                                           .genome,
                                                      &ind.genome);
-                          if (dist < best_dist) ||
-                             ((dist == best_dist) && niche_sizes[i] < niche_sizes[best_niche]) {
-                              best_niche = i;
-                              best_dist = dist;
-                          }
+
+                          best_niche = match best_niche {
+                              None => {
+                                Some((i, dist))
+                              }
+                              Some((best_niche_i, best_dist)) => {
+                                  if (dist < best_dist) ||
+                                     ((dist == best_dist) && niche_sizes[i] < niche_sizes[best_niche_i]) {
+                                      Some((i, dist))
+                                  }
+                                  else {
+                                      // keep old best niche
+                                      Some((best_niche_i, best_dist))
+                                  }
+                              }
+                          }; 
                       }
 
+                      let best_niche_i = best_niche.unwrap().0;
+
                       // sort `ind` into niche `best_niche`. Increase size of that niche.
-                      niche_sizes[best_niche] += 1;
-                      best_niche
+                      niche_sizes[best_niche_i] += 1;
+                      best_niche_i
                   })
                   .collect();
 
@@ -689,9 +706,7 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
         let mut last_number_of_niches = 1;
 
         while !goal_condition(iteration, &current_rated_pop, last_number_of_niches) {
-            let niches = current_rated_pop.partition(rng,
-                                                     self.compatibility_threshold,
-                                                     self.compatibility);
+            let niches = current_rated_pop.partition_n(5, self.compatibility, rng);
             last_number_of_niches = niches.num_niches();
             let (new_rated, new_unrated) = niches.reproduce_global(self.pop_size,
                                                                    self.elite_percentage,
