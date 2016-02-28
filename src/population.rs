@@ -352,13 +352,13 @@ impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
 
     /// Partition the whole population into species (niches)
 
-    pub fn partition<R, C>(self,
-                           rng: &mut R,
+    pub fn partition<C, R>(self,
                            compatibility_threshold: f64,
-                           compatibility: &C)
+                           compatibility: &C,
+                           rng: &mut R)
                            -> Niches<T>
-        where R: Rng,
-              C: Distance<T>
+        where C: Distance<T>,
+              R: Rng
     {
         let mut niches = Niches::new();
 
@@ -741,6 +741,17 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
     pub fn add_unrated_population_as_niche(&mut self, pop: Population<T, Unrated>) {
         self.niches.add_niche(Niche::from_population(pop.rate_par(self.fitness)));
+    }
+
+    pub fn partition_threshold<C, R>(&mut self,
+                                     compatibility_threshold: f64,
+                                     compatibility: &C,
+                                     rng: &mut R)
+        where C: Distance<T>,
+              R: Rng
+    {
+        let niches = mem::replace(&mut self.niches, Niches::new());
+        self.niches = niches.collapse().partition(compatibility_threshold, compatibility, rng);
     }
 
     pub fn partition_n_sorted<C, R>(&mut self, n: usize, compatibility: &C, rng: &mut R)
