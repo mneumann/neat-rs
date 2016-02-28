@@ -11,7 +11,7 @@ extern crate env_logger;
 mod common;
 mod config;
 
-use neat::population::{Population, Unrated, Runner, NicheRunner};
+use neat::population::{Population, Unrated, NicheRunner};
 use neat::traits::{FitnessEval};
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
 use neat::fitness::Fitness;
@@ -124,27 +124,34 @@ fn main() {
         _n: PhantomData,
     };
 
-    let mut runner = Runner {
-        pop_size: cfg.population_size(),
-        elite_percentage: cfg.elite_percentage(),
-        selection_percentage: cfg.selection_percentage(),
-        compatibility_threshold: cfg.compatibility_threshold(),
-        compatibility: cfg.genome_compatibility(),
-        mate: &mut mater,
-        fitness: &fitness_evaluator,
-        _marker: PhantomData,
-    };
+    let mut niche_runner = NicheRunner::new(&fitness_evaluator);
 
-    let max_iters = cfg.stop_after_iters();
-    let good_fitness = cfg.stop_if_fitness_better_than();
-    let (_iter, new_pop) = runner.run(initial_pop,
-                                     &|iter, pop, last_num_niches| {
-                                         println!("iter: {}: best fitness: {:.3}; last num niches: {}", iter, pop.best_individual().unwrap().fitness().get(), last_num_niches);
-                                         iter >= max_iters || pop.best_individual().unwrap().fitness().get() > good_fitness
-                                     },
-                                     &mut rng);
+    niche_runner.add_unrated_population_as_niche(initial_pop);
 
-    let final_pop = new_pop.sort();
+    while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
+        println!("iteration: {}", niche_runner.current_iteration());
+
+        let best_fitness = niche_runner.best_individual().fitness().get();;
+        println!("best fitness: {:2}", best_fitness); 
+        println!("num individuals: {}", niche_runner.num_individuals());
+
+        if best_fitness > cfg.stop_if_fitness_better_than() {
+            println!("Premature abort.");
+            break;
+        }
+
+        // partition into n niches.
+        niche_runner.partition_n_sorted(5, cfg.genome_compatibility(), &mut rng);
+        println!("partitioned into num niches: {}", niche_runner.num_niches());
+
+        niche_runner.reproduce_global(cfg.population_size(),
+                                      cfg.elite_percentage(),
+                                      cfg.selection_percentage(),
+                                      &mut mater,
+                                      &mut rng);
+    }
+
+    let final_pop = niche_runner.into_population().sort();
 
     {
         let best = final_pop.best_individual().unwrap();

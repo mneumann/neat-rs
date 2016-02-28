@@ -87,6 +87,10 @@ impl<T: Genotype + Debug> Niche<T> {
         self.population.len()
     }
 
+    pub fn best_individual(&self) -> &Individual<T> {
+        self.population.best_individual().unwrap()
+    }
+
     fn mean_fitness(&self) -> Fitness {
         self.population.mean_fitness()
     }
@@ -122,6 +126,19 @@ impl<T: Genotype + Debug> Niches<T> {
             niches: Vec::new(),
         }
     }
+
+    pub fn best_individual(&self) -> &Individual<T> {
+        assert!(self.niches.len() > 0);
+        let mut best = self.niches[0].best_individual();
+        for i in 1..self.niches.len() {
+            let best2 = self.niches[i].best_individual();
+            if best2.fitness() > best.fitness() {
+                best = best2;
+            }
+        }
+        return best;
+    }
+
 
     /// Creates a `Niches` with a single niche containing the whole `Population`.
 
@@ -327,8 +344,7 @@ impl<T: Genotype + Debug> Into<Population<T, Rated>> for Population<T, RatedSort
     }
 }
 
-impl<T: Genotype + Debug, RA: IsRated> Population<T, RA>
-{
+impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
     fn mean_fitness(&self) -> Fitness {
         let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness()).sum();
         sum / Fitness::new(self.len() as f64)
@@ -470,9 +486,10 @@ impl<T: Genotype + Debug, RA: IsRated> Population<T, RA>
         assert!(niche_assignment.len() == self.individuals.len());
 
         // Create the niches.
-        let mut niche_pops: Vec<Population<T, Rated>> = niche_centroids.iter()
-                                                                       .map(|_| Population::<T, Rated>::new())
-                                                                       .collect();
+        let mut niche_pops: Vec<Population<T, Rated>> =
+            niche_centroids.iter()
+                           .map(|_| Population::<T, Rated>::new())
+                           .collect();
 
         // And put each individual into it's niche.
         for (ind, niche_id) in self.individuals.into_iter().zip(niche_assignment) {
@@ -677,28 +694,85 @@ impl<T: Genotype + Debug> Population<T, Rated> {
 }
 
 pub struct NicheRunner<'a, T, F>
-where
-    T: Genotype + Debug + 'a,
-    F: FitnessEval<T> + 'a,
+    where T: Genotype + Debug + 'a,
+          F: FitnessEval<T> + 'a
 {
     niches: Niches<T>,
     fitness: &'a F,
+    current_iteration: usize,
 }
 
 impl<'a, T, F> NicheRunner<'a, T, F>
-where
-    T: Genotype + Debug + 'a,
-    F: FitnessEval<T> + 'a,
+    where T: Genotype + Debug + 'a,
+          F: FitnessEval<T> + 'a
 {
     pub fn new(fitness: &'a F) -> Self {
         NicheRunner {
             niches: Niches::new(),
-            fitness: fitness
+            fitness: fitness,
+            current_iteration: 0,
         }
+    }
+
+    pub fn best_individual(&self) -> &Individual<T> {
+        assert!(self.niches.num_niches() > 0);
+        self.niches.best_individual()
+    }
+
+    pub fn current_iteration(&self) -> usize {
+        self.current_iteration
+    }
+
+    pub fn num_niches(&self) -> usize {
+        self.niches.num_niches()
+    }
+
+    pub fn num_individuals(&self) -> usize {
+        self.niches.num_individuals()
+    }
+
+    pub fn has_next_iteration(&mut self, max_iterations: usize) -> bool {
+        if self.current_iteration >= max_iterations {
+            return false;
+        }
+        self.current_iteration += 1;
+        return true;
     }
 
     pub fn add_unrated_population_as_niche(&mut self, pop: Population<T, Unrated>) {
         self.niches.add_niche(Niche::from_population(pop.rate_par(self.fitness)));
+    }
+
+    pub fn partition_n_sorted<C, R>(&mut self, n: usize, compatibility: &C, rng: &mut R)
+        where C: Distance<T>,
+              R: Rng
+    {
+        let niches = mem::replace(&mut self.niches, Niches::new());
+        self.niches = niches.collapse().sort().partition_n(n, compatibility, rng);
+    }
+
+    pub fn reproduce_global<M, R>(&mut self,
+                                  new_pop_size: usize,
+                                  elite_percentage: Closed01<f64>,
+                                  selection_percentage: Closed01<f64>,
+                                  mate: &mut M,
+                                  rng: &mut R)
+        where M: Mate<T>,
+              R: Rng
+    {
+        let niches = mem::replace(&mut self.niches, Niches::new());
+        let (mut new_rated, new_unrated) = niches.reproduce_global(new_pop_size,
+                                                                   elite_percentage,
+                                                                   selection_percentage,
+                                                                   mate,
+                                                                   rng);
+
+        new_rated.append(new_unrated.rate_par(self.fitness));
+        self.niches = Niches::from_single_population(new_rated);
+    }
+
+    pub fn into_population(self) -> Population<T, Rated> {
+        self.niches.collapse()
     }
 }
 
