@@ -74,7 +74,6 @@ pub struct Niches<T: Genotype + Debug> {
     niches: Vec<Niche<T>>,
 }
 
-
 impl<T: Genotype + Debug> Niche<T> {
     fn from_population(pop: Population<T, Rated>) -> Self {
         assert!(pop.len() > 0);
@@ -319,10 +318,185 @@ impl<T: Genotype + Debug> Population<T, Unrated> {
     }
 }
 
-impl<T: Genotype + Debug, R: IsRated> Population<T, R> {
+impl<T: Genotype + Debug> Into<Population<T, Rated>> for Population<T, RatedSorted> {
+    fn into(self) -> Population<T, Rated> {
+        Population {
+            individuals: self.individuals,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T: Genotype + Debug, RA: IsRated> Population<T, RA>
+{
     fn mean_fitness(&self) -> Fitness {
         let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness()).sum();
         sum / Fitness::new(self.len() as f64)
+    }
+
+    /// Partition the whole population into species (niches)
+
+    pub fn partition<R, C>(self,
+                           rng: &mut R,
+                           compatibility_threshold: f64,
+                           compatibility: &C)
+                           -> Niches<T>
+        where R: Rng,
+              C: Distance<T>
+    {
+        let mut niches = Niches::new();
+
+        for ind in self.individuals.into_iter() {
+            if let Some(niche) = niches.find_first_matching_niche(&ind,
+                                                                  compatibility_threshold,
+                                                                  compatibility,
+                                                                  rng) {
+                niche.add_individual(ind);
+                continue;
+            }
+
+            // if no compatible niche was found, create a new niche containing this individual.
+            niches.add_niche(Niche::from_individual(ind));
+        }
+
+        niches
+    }
+
+    /// Partition the population into `n` niches.
+    ///
+    /// * (Sort population).
+    /// * Split population into `n` regions.
+    /// * Within each region, select a random individual as `centroid`.
+    /// * This becomes the centroid of that a niche.
+    /// * Now place each remaining individual into the niche that has the closest distance.
+
+    pub fn partition_n<C, R>(self, n: usize, compatibility: &C, rng: &mut R) -> Niches<T>
+        where C: Distance<T>,
+              R: Rng,
+              Self: Into<Population<T, Rated>>
+    {
+        assert!(n > 0);
+        assert!(self.len() > 0);
+
+        if n == 1 {
+            return Niches::from_single_population(self.into());
+        }
+
+        if n > self.len() {
+            warn!("Number of niches ({}) > number of individuals ({}). Cap!",
+                  n,
+                  self.len());
+        }
+        let n = cmp::min(n, self.len());
+
+        assert!(n > 1 && n <= self.len());
+
+        let max_size_per_niche = cmp::max(2, (self.len() * 2) / n);
+
+        // We distribute `n` points within the internal (0..len).
+        // Then around each point, we select a random individual as centroid.
+        let distribute = DistributeInterval::new(n, 0.0, self.len() as f64);
+
+        // We select individuals within [pt - half_width .. pt + half_width].
+        // It's okay to have overlap.
+        let half_width = ((self.len() as f64 / n as f64) / 2.0) + 1.0;
+
+        // For each of the `n` niches, determine a centroid individual (index)
+        let niche_centroids: Vec<usize> =
+            distribute.map(|pt| {
+                          // find a centroid for niche by looking around `pt`
+                          let centroid_idx_f = rng.gen_range(pt - half_width, pt + half_width)
+                                                  .max(0.0);
+                          let centroid_idx: usize =
+                              cmp::min(self.len() - 1,
+                                       probabilistic_round(centroid_idx_f, rng) as usize);
+                          assert!(centroid_idx < self.len());
+                          centroid_idx
+                      })
+                      .collect();
+
+        assert!(niche_centroids.len() == n);
+
+        // record the size (number of individuals) within each niche.
+        let mut niche_sizes: Vec<usize> = niche_centroids.iter().map(|_| 0).collect();
+
+        // in rare cases, two adjacent niches could have the same centroid.
+
+        // For each individual `ind` test all centroids. Sort it into that niche,
+        // whoose centroid is closest. If two niche centroids have equal distance to `ind`,
+        // take the smaller niche.
+
+        let niche_assignment: Vec<usize> =
+            self.individuals
+                .iter()
+                .map(|ind| {
+                    let mut best_niche = None;
+
+                    // test all other niches
+                    for i in 0..n {
+
+                        // Only test niche if it isn't full yet!
+                        if niche_sizes[i] > max_size_per_niche {
+                            continue;
+                        }
+
+                        let dist = compatibility.distance(&self.individuals[niche_centroids[i]]
+                                                               .genome,
+                                                          &ind.genome);
+
+                        best_niche = match best_niche {
+                            None => Some((i, dist)),
+                            Some((best_niche_i, best_dist)) => {
+                                if (dist < best_dist) ||
+                                   ((dist == best_dist) &&
+                                    niche_sizes[i] < niche_sizes[best_niche_i]) {
+                                    Some((i, dist))
+                                } else {
+                                    // keep old best niche
+                                    Some((best_niche_i, best_dist))
+                                }
+                            }
+                        };
+                    }
+
+                    let best_niche_i = best_niche.unwrap().0;
+
+                    // sort `ind` into niche `best_niche`. Increase size of that niche.
+                    niche_sizes[best_niche_i] += 1;
+                    best_niche_i
+                })
+                .collect();
+
+        assert!(niche_assignment.len() == self.individuals.len());
+
+        // Create the niches.
+        let mut niche_pops: Vec<Population<T, Rated>> = niche_centroids.iter()
+                                                                       .map(|_| Population::<T, Rated>::new())
+                                                                       .collect();
+
+        // And put each individual into it's niche.
+        for (ind, niche_id) in self.individuals.into_iter().zip(niche_assignment) {
+            niche_pops[niche_id].add_individual(ind);
+        }
+
+        let mut niches = Niches::new();
+
+        for niche_pop in niche_pops.into_iter() {
+            if niche_pop.len() > 0 {
+                // we reject empty niches.
+                niches.add_niche(Niche::from_population(niche_pop));
+            }
+        }
+
+        assert!(niches.num_niches() <= n);
+
+        if niches.num_niches() != n {
+            warn!("Niche number mismatch. Expected: {}. Actual: {}",
+                  n,
+                  niches.num_niches());
+        }
+
+        niches
     }
 }
 
@@ -500,170 +674,6 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         // then copy the elites
         new_rated_population.merge(sorted_pop, elite_size);
     }
-
-    /// Partition the whole population into species (niches)
-
-    pub fn partition<R, C>(self,
-                           rng: &mut R,
-                           compatibility_threshold: f64,
-                           compatibility: &C)
-                           -> Niches<T>
-        where R: Rng,
-              C: Distance<T>
-    {
-        let mut niches = Niches::new();
-
-        for ind in self.individuals.into_iter() {
-            if let Some(niche) = niches.find_first_matching_niche(&ind,
-                                                                  compatibility_threshold,
-                                                                  compatibility,
-                                                                  rng) {
-                niche.add_individual(ind);
-                continue;
-            }
-
-            // if no compatible niche was found, create a new niche containing this individual.
-            niches.add_niche(Niche::from_individual(ind));
-        }
-
-        niches
-    }
-
-    /// Partition the population into `n` niches.
-    ///
-    /// * Sort population.
-    /// * Split population into `n` regions.
-    /// * Within each region, select a random individual as `centroid`.
-    /// * This becomes the centroid of that a niche.
-    /// * Now place each remaining individual into the niche that has the closest distance.
-
-    pub fn partition_n<C, R>(self, n: usize, compatibility: &C, rng: &mut R) -> Niches<T>
-        where C: Distance<T>,
-              R: Rng
-    {
-        assert!(n > 0);
-        assert!(self.len() > 0);
-
-        if n == 1 {
-            return Niches::from_single_population(self);
-        }
-
-        if n > self.len() {
-            warn!("Number of niches ({}) > number of individuals ({}). Cap!",
-                  n,
-                  self.len());
-        }
-        let n = cmp::min(n, self.len());
-
-        assert!(n > 1 && n <= self.len());
-
-        let max_size_per_niche = cmp::max(2, (self.len() * 2) / n);
-
-        // We distribute `n` points within the internal (0..len).
-        // Then around each point, we select a random individual as centroid.
-        let distribute = DistributeInterval::new(n, 0.0, self.len() as f64);
-
-        // We select individuals within [pt - half_width .. pt + half_width].
-        // It's okay to have overlap.
-        let half_width = ((self.len() as f64 / n as f64) / 2.0) + 1.0;
-
-        // For each of the `n` niches, determine a centroid individual (index)
-        let niche_centroids: Vec<usize> = distribute.map(|pt| {
-                      // find a centroid for niche by looking around `pt` 
-                      let centroid_idx_f = rng.gen_range(pt - half_width, pt + half_width).max(0.0);
-                      let centroid_idx: usize = cmp::min(self.len()-1, probabilistic_round(centroid_idx_f, rng) as usize);
-                      assert!(centroid_idx < self.len());
-                      centroid_idx
-                  }).collect();
-
-        assert!(niche_centroids.len() == n);
-
-        // record the size (number of individuals) within each niche.
-        let mut niche_sizes: Vec<usize> = niche_centroids.iter().map(|_| 0).collect();
-
-        // in rare cases, two adjacent niches could have the same centroid.
-
-        let sorted = self.sort();
-
-        // For each individual `ind` test all centroids. Sort it into that niche,
-        // whoose centroid is closest. If two niche centroids have equal distance to `ind`,
-        // take the smaller niche.
-
-        let niche_assignment: Vec<usize> =
-            sorted.individuals
-                  .iter()
-                  .map(|ind| {
-                      let mut best_niche = None;
-
-                      // test all other niches
-                      for i in 0..n {
-
-                          // Only test niche if it isn't full yet!
-                          if niche_sizes[i] > max_size_per_niche {
-                              continue;
-                          }
-
-                          let dist =
-                              compatibility.distance(&sorted.individuals[niche_centroids[i]]
-                                                          .genome,
-                                                     &ind.genome);
-
-                          best_niche = match best_niche {
-                              None => {
-                                Some((i, dist))
-                              }
-                              Some((best_niche_i, best_dist)) => {
-                                  if (dist < best_dist) ||
-                                     ((dist == best_dist) && niche_sizes[i] < niche_sizes[best_niche_i]) {
-                                      Some((i, dist))
-                                  }
-                                  else {
-                                      // keep old best niche
-                                      Some((best_niche_i, best_dist))
-                                  }
-                              }
-                          }; 
-                      }
-
-                      let best_niche_i = best_niche.unwrap().0;
-
-                      // sort `ind` into niche `best_niche`. Increase size of that niche.
-                      niche_sizes[best_niche_i] += 1;
-                      best_niche_i
-                  })
-                  .collect();
-
-        assert!(niche_assignment.len() == sorted.individuals.len());
-
-        // Create the niches.
-        let mut niche_pops: Vec<Population<T, Rated>> = niche_centroids.iter()
-                                                                       .map(|_| Population::new())
-                                                                       .collect();
-
-        // And put each individual into it's niche.
-        for (ind, niche_id) in sorted.individuals.into_iter().zip(niche_assignment) {
-            niche_pops[niche_id].add_individual(ind);
-        }
-
-        let mut niches = Niches::new();
-
-        for niche_pop in niche_pops.into_iter() {
-            if niche_pop.len() > 0 {
-                // we reject empty niches.
-                niches.add_niche(Niche::from_population(niche_pop));
-            }
-        }
-
-        assert!(niches.num_niches() <= n);
-
-        if niches.num_niches() != n {
-            warn!("Niche number mismatch. Expected: {}. Actual: {}",
-                  n,
-                  niches.num_niches());
-        }
-
-        niches
-    }
 }
 
 pub struct Runner<'a, T, C, M, F>
@@ -706,7 +716,7 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
         let mut last_number_of_niches = 1;
 
         while !goal_condition(iteration, &current_rated_pop, last_number_of_niches) {
-            let niches = current_rated_pop.partition_n(5, self.compatibility, rng);
+            let niches = current_rated_pop.sort().partition_n(5, self.compatibility, rng);
             last_number_of_niches = niches.num_niches();
             let (new_rated, new_unrated) = niches.reproduce_global(self.pop_size,
                                                                    self.elite_percentage,
