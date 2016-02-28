@@ -4,6 +4,7 @@ use prob::Prob;
 /// which parent a gene is taken.
 ///
 /// XXX: It's probably faster to not use floats here.
+#[derive(Debug, Copy, Clone)]
 pub struct ProbabilisticCrossover {
     /// Probability to take a matching gene from the fitter (left) parent.
     pub prob_match_left: Prob,

@@ -17,6 +17,10 @@ pub struct Configuration {
     target_graph_file: Option<String>,
 
     mutate_method_weighting: MutateMethodWeighting,
+    probabilistic_crossover: ProbabilisticCrossover,
+    
+    p_crossover: Prob,
+    p_mutate_element: Prob,
 
     elite_percentage: Closed01<f64>,
     selection_percentage: Closed01<f64>,
@@ -61,6 +65,16 @@ fn parse_float(map: &BTreeMap<String, Sexp>, key: &str) -> Option<f64> {
     }
 }
 
+fn parse_prob(map: &BTreeMap<String, Sexp>, key: &str) -> Option<Prob> {
+    if map.contains_key(key) {
+        let val = map[key].get_float().unwrap();
+        assert!(val >= 0.0 && val <= 1.0);
+        Some(Prob::new(val as f32))
+    } else {
+        None
+    }
+}
+
 fn parse_string(map: &BTreeMap<String, Sexp>, key: &str) -> Option<String> {
     if map.contains_key(key) {
         Some(map[key].get_str().unwrap().to_owned())
@@ -91,6 +105,17 @@ impl Configuration {
                 w_delete_connection: 1,
                 w_add_node: 1,
             },
+
+            probabilistic_crossover: ProbabilisticCrossover {
+                prob_match_left: Prob::new(0.5), // NEAT always selects a random parent for matching genes
+                prob_disjoint_left: Prob::new(0.9),
+                prob_excess_left: Prob::new(0.9),
+                prob_disjoint_right: Prob::new(0.15),
+                prob_excess_right: Prob::new(0.15),
+            },
+
+            p_crossover: Prob::new(0.5),
+            p_mutate_element: Prob::new(0.02),
 
             elite_percentage: Closed01::new(0.05),
             selection_percentage: Closed01::new(0.20),
@@ -157,6 +182,31 @@ impl Configuration {
             cfg.genome_compatibility.weight= val;
         }
 
+        if let Some(val) = parse_prob(&map, "px_match_left") {
+            cfg.probabilistic_crossover.prob_match_left = val;
+        }
+        if let Some(val) = parse_prob(&map, "px_disjoint_left") {
+            cfg.probabilistic_crossover.prob_disjoint_left = val;
+        }
+        if let Some(val) = parse_prob(&map, "px_excess_left") {
+            cfg.probabilistic_crossover.prob_excess_left = val;
+        }
+        if let Some(val) = parse_prob(&map, "px_disjoint_right") {
+            cfg.probabilistic_crossover.prob_disjoint_right = val;
+        }
+        if let Some(val) = parse_prob(&map, "px_excess_right") {
+            cfg.probabilistic_crossover.prob_excess_right = val;
+        }
+
+        if let Some(val) = parse_prob(&map, "p_crossover") {
+            cfg.p_crossover = val;
+        }
+
+        if let Some(val) = parse_prob(&map, "p_mutate_element") {
+            cfg.p_mutate_element = val;
+        }
+
+
         if let Some(val) = parse_uint(&map, "stop_after_iterations") { cfg.stop_after_iterations = val as usize; }
 
         if let Some(val) = parse_uint(&map, "num_niches") { cfg.num_niches = val as usize; }
@@ -167,12 +217,11 @@ impl Configuration {
     }
 
     pub fn p_crossover(&self) -> Prob {
-        Prob::new(0.5)
+        self.p_crossover
     }
 
     pub fn p_mutate_element(&self) -> Prob {
-        // 1% mutation rate per link
-        Prob::new(0.01)
+        self.p_mutate_element
     }
 
     pub fn weight_perturbance(&self) -> WeightPerturbanceMethod {
@@ -232,13 +281,7 @@ impl Configuration {
     }
 
     pub fn probabilistic_crossover(&self) -> ProbabilisticCrossover {
-        ProbabilisticCrossover {
-            prob_match_left: Prob::new(0.5), // NEAT always selects a random parent for matching genes
-            prob_disjoint_left: Prob::new(0.9),
-            prob_excess_left: Prob::new(0.9),
-            prob_disjoint_right: Prob::new(0.15),
-            prob_excess_right: Prob::new(0.15),
-        }
+        self.probabilistic_crossover
     }
 
     pub fn mutate_method_weighting(&self) -> MutateMethodWeighting {
