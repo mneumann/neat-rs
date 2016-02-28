@@ -73,7 +73,7 @@ impl<T: Genotype + Debug> Niches<T> {
     pub fn single(pop: Population<T, Rated>) -> Self {
         Niches {
             total_individuals: pop.len(),
-            niches: vec![pop]
+            niches: vec![pop],
         }
     }
 
@@ -155,16 +155,16 @@ impl<T: Genotype + Debug> Niches<T> {
     /// one unrated).
 
     pub fn reproduce_global<M, R>(self,
-                              new_pop_size: usize,
-                              // how many of the best individuals of a niche are copied as-is into the
-                              // new population?
-                              elite_percentage: Closed01<f64>,
-                              // how many of the best individuals of a niche are selected for
-                              // reproduction?
-                              selection_percentage: Closed01<f64>,
-                              mate: &mut M,
-                              rng: &mut R)
-                              -> (Population<T, Rated>, Population<T, Unrated>)
+                                  new_pop_size: usize,
+                                  // how many of the best individuals of a niche are copied as-is into the
+                                  // new population?
+                                  elite_percentage: Closed01<f64>,
+                                  // how many of the best individuals of a niche are selected for
+                                  // reproduction?
+                                  selection_percentage: Closed01<f64>,
+                                  mate: &mut M,
+                                  rng: &mut R)
+                                  -> (Population<T, Rated>, Population<T, Unrated>)
         where M: Mate<T>,
               R: Rng
     {
@@ -194,8 +194,13 @@ impl<T: Genotype + Debug> Niches<T> {
 
             let niche_size = new_pop_size as f64 * percentage_of_population;
 
-            niche.reproduce_into(niche_size, elite_percentage, selection_percentage, mate,
-                            &mut new_unrated_population, &mut new_rated_population, rng);
+            niche.reproduce_into(niche_size,
+                                 elite_percentage,
+                                 selection_percentage,
+                                 mate,
+                                 &mut new_unrated_population,
+                                 &mut new_rated_population,
+                                 rng);
         }
 
         return (new_rated_population, new_unrated_population);
@@ -266,7 +271,6 @@ impl<T: Genotype + Debug, R: IsRated> Population<T, R> {
 }
 
 impl<T: Genotype + Debug> Population<T, RatedSorted> {
-
     pub fn into_iter(self) -> ::std::vec::IntoIter<Individual<T>> {
         self.individuals.into_iter()
     }
@@ -362,22 +366,29 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     /// Same as `reproduce_into` but returns two Populations (rated, unrated).
 
     pub fn reproduce<M, R>(self,
-                              // The expected size of the new population
-                              new_pop_size: f64,
-                              // how many of the best individuals of a population are copied as-is into the
-                              // new population?
-                              elite_percentage: Closed01<f64>,
-                              // how many of the best individuals of a populatiion are selected for
-                              // reproduction?
-                              selection_percentage: Closed01<f64>,
-                              mate: &mut M,
-                              rng: &mut R) -> (Population<T, Rated>, Population<T, Unrated>)
+                           // The expected size of the new population
+                           new_pop_size: f64,
+                           // how many of the best individuals of a population are copied as-is into the
+                           // new population?
+                           elite_percentage: Closed01<f64>,
+                           // how many of the best individuals of a populatiion are selected for
+                           // reproduction?
+                           selection_percentage: Closed01<f64>,
+                           mate: &mut M,
+                           rng: &mut R)
+                           -> (Population<T, Rated>, Population<T, Unrated>)
         where M: Mate<T>,
               R: Rng
     {
         let mut new_unrated_population: Population<T, Unrated> = Population::new();
         let mut new_rated_population: Population<T, Rated> = Population::new();
-        self.reproduce_into(new_pop_size, elite_percentage, selection_percentage, mate, &mut new_unrated_population, &mut new_rated_population, rng);
+        self.reproduce_into(new_pop_size,
+                            elite_percentage,
+                            selection_percentage,
+                            mate,
+                            &mut new_unrated_population,
+                            &mut new_rated_population,
+                            rng);
 
         return (new_rated_population, new_unrated_population);
     }
@@ -390,18 +401,18 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     /// Then, `elite_percentage` of the best genomes is always copied into the new generation.
 
     fn reproduce_into<M, R>(self,
-                              // The expected size of the new population
-                              new_pop_size: f64,
-                              // how many of the best individuals of a population are copied as-is into the
-                              // new population?
-                              elite_percentage: Closed01<f64>,
-                              // how many of the best individuals of a populatiion are selected for
-                              // reproduction?
-                              selection_percentage: Closed01<f64>,
-                              mate: &mut M,
-                              new_unrated_population: &mut Population<T, Unrated>,
-                              new_rated_population: &mut Population<T, Rated>,
-                              rng: &mut R)
+                            // The expected size of the new population
+                            new_pop_size: f64,
+                            // how many of the best individuals of a population are copied as-is into the
+                            // new population?
+                            elite_percentage: Closed01<f64>,
+                            // how many of the best individuals of a populatiion are selected for
+                            // reproduction?
+                            selection_percentage: Closed01<f64>,
+                            mate: &mut M,
+                            new_unrated_population: &mut Population<T, Unrated>,
+                            new_rated_population: &mut Population<T, Rated>,
+                            rng: &mut R)
         where M: Mate<T>,
               R: Rng
     {
@@ -415,9 +426,9 @@ impl<T: Genotype + Debug> Population<T, Rated> {
                                                  rng) as usize;
 
         // number of the best individuals to use for mating.
-        let select_size = cmp::min(self.len(), probabilistic_round(new_pop_size *
-                                              selection_percentage.get(),
-                                              rng) as usize);
+        let select_size =
+            cmp::min(self.len(),
+                     probabilistic_round(new_pop_size * selection_percentage.get(), rng) as usize);
 
         let sorted_pop = self.sort();
 
@@ -494,13 +505,15 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
         let mut last_number_of_niches = 1;
 
         while !goal_condition(iteration, &current_rated_pop, last_number_of_niches) {
-            let niches = current_rated_pop.partition(rng, self.compatibility_threshold, self.compatibility);
+            let niches = current_rated_pop.partition(rng,
+                                                     self.compatibility_threshold,
+                                                     self.compatibility);
             last_number_of_niches = niches.num_niches();
             let (new_rated, new_unrated) = niches.reproduce_global(self.pop_size,
-                                            self.elite_percentage,
-                                            self.selection_percentage,
-                                            self.mate,
-                                            rng);
+                                                                   self.elite_percentage,
+                                                                   self.selection_percentage,
+                                                                   self.mate,
+                                                                   rng);
 
             current_rated_pop = new_rated;
             current_rated_pop.append(new_unrated.rate_par(self.fitness));
