@@ -84,8 +84,19 @@ impl<T: Genotype + Debug> Niche<T> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.population.len()
+    }
+
     fn mean_fitness(&self) -> Fitness {
         self.population.mean_fitness()
+    }
+
+    /// Returns a reference to the centroid element if specified, or else
+    /// a random element of the niche.
+
+    fn centroid_or_else_random<R: Rng>(&self, rng: &mut R) -> &Individual<T> {
+        self.centroid.and_then(|i| self.population.individuals.get(i)).or_else(|| rng.choose(&self.population.individuals)).unwrap()
     }
 
     fn add_individual(&mut self, ind: Individual<T>) {
@@ -138,12 +149,6 @@ impl<T: Genotype + Debug> Niches<T> {
         pop
     }
 
-    /*
-    pub fn into_iter(self) -> ::std::vec::IntoIter<Population<T, Rated>> {
-        self.niches.into_iter()
-    }
-    */
-
     /// The sum of all "mean fitnesses" of all niches.
 
     fn total_mean(&self) -> Fitness {
@@ -162,35 +167,34 @@ impl<T: Genotype + Debug> Niches<T> {
         self.niches.len()
     }
 
-    /// Add an individual to the first matching niche (given by the `compatibility_threshold` and
-    /// `compatibility` function. If no niche matches, create a new.
+    /// Add a new niche to the `Niches`.
+    pub fn add_niche(&mut self, niche: Niche<T>) {
+        self.total_individuals += niche.len();
+        self.niches.push(niche);
+    }
 
-    pub fn insert_first_matching<R, C>(&mut self,
-                                ind: Individual<T>,
+    /// Add an individual to the first matching niche (given by the `compatibility_threshold` and
+    /// `compatibility` function, comparing against a random individual of that niche.
+    /// If no niche matches, create a new.
+
+    pub fn find_first_matching_niche<'a, R, C>(&'a mut self,
+                                ind: &Individual<T>,
                                 compatibility_threshold: f64,
                                 compatibility: &C,
-                                rng: &mut R)
+                                rng: &mut R) -> Option<&'a mut Niche<T>> 
         where R: Rng,
               C: Distance<T>
     {
-        self.total_individuals += 1;
-
         for niche in self.niches.iter_mut() {
-            // Is this genome compatible with this niche? Test against a random genome.
-            let compatible = match rng.choose(&niche.population.individuals) {
-                Some(probe) => {
-                    compatibility.distance(&probe.genome, &ind.genome) < compatibility_threshold
-                }
-                // If a niche is empty, a genome always is compatible (note that a niche can't be empyt)
-                None => true,
-            };
-            if compatible {
-                niche.add_individual(ind);
-                return;
+
+            // Is this genome compatible with this niche? Compare `ind` against the centroid of
+            // `niche` or else a random individual of that `niche`.
+
+            if compatibility.distance(&niche.centroid_or_else_random(rng).genome, &ind.genome) < compatibility_threshold {
+                return Some(niche);
             }
         }
-        // if no compatible niche was found, create a new niche containing this genome.
-        self.niches.push(Niche::from_individual(ind));
+        return None;
     }
 
     /// Reproduce individuals of all niches. Each niche is allowed to reproduce a number of
@@ -503,7 +507,13 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         let mut niches = Niches::new();
 
         for ind in self.individuals.into_iter() {
-            niches.insert_first_matching(ind, compatibility_threshold, compatibility, rng);
+            if let Some(niche) = niches.find_first_matching_niche(&ind, compatibility_threshold, compatibility, rng) {
+                niche.add_individual(ind);
+                continue;
+            }
+
+            // if no compatible niche was found, create a new niche containing this individual.
+            niches.add_niche(Niche::from_individual(ind));
         }
 
         niches
