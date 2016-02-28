@@ -676,6 +676,32 @@ impl<T: Genotype + Debug> Population<T, Rated> {
     }
 }
 
+pub struct NicheRunner<'a, T, F>
+where
+    T: Genotype + Debug + 'a,
+    F: Sync + Fn(&T) -> Fitness + 'a
+{
+    niches: Niches<T>,
+    fitness: &'a F,
+}
+
+impl<'a, T, F> NicheRunner<'a, T, F>
+where
+    T: Genotype + Debug + 'a,
+    F: Sync + Fn(&T) -> Fitness + 'a
+{
+    pub fn new(fitness: &'a F) -> Self {
+        NicheRunner {
+            niches: Niches::new(),
+            fitness: fitness
+        }
+    }
+
+    pub fn add_unrated_population_as_niche(&mut self, pop: Population<T, Unrated>) {
+        self.niches.add_niche(Niche::from_population(pop.rate_par(self.fitness)));
+    }
+}
+
 pub struct Runner<'a, T, C, M, F>
     where T: Genotype + Debug,
           C: Distance<T> + 'a,
