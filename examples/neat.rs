@@ -118,7 +118,7 @@ fn main() {
         p_crossover_detail: cfg.probabilistic_crossover(),
         p_mutate_element: cfg.p_mutate_element(),
         weight_perturbance: cfg.weight_perturbance(),
-        mutate_weights: cfg.mutate_weights(),
+        mutate_weights: cfg.mutate_method_weighting(),
         global_cache: &mut cache,
         element_strategy: &ES,
         _n: PhantomData,

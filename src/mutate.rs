@@ -12,7 +12,7 @@ pub enum MutateMethod {
     AddNode,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct MutateMethodWeighting {
     pub w_modify_weight: u32,
     pub w_add_connection: u32,

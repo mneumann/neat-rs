@@ -16,11 +16,7 @@ pub struct Configuration {
     edge_score: bool,
     target_graph_file: Option<String>,
 
-    w_modify_weight: u32,
-    w_add_node: u32,
-    w_add_connection: u32,
-    w_enable_connection: u32,
-    w_delete_connection: u32,
+    mutate_method_weighting: MutateMethodWeighting,
 
     elite_percentage: Closed01<f64>,
     selection_percentage: Closed01<f64>,
@@ -87,11 +83,14 @@ impl Configuration {
         Configuration {
             population_size: 100,
             edge_score: false,
-            w_modify_weight: 100,
-            w_add_connection: 10,
-            w_enable_connection: 10,
-            w_delete_connection: 1,
-            w_add_node: 1,
+
+            mutate_method_weighting: MutateMethodWeighting {
+                w_modify_weight: 100,
+                w_add_connection: 10,
+                w_enable_connection: 10,
+                w_delete_connection: 1,
+                w_add_node: 1,
+            },
 
             elite_percentage: Closed01::new(0.05),
             selection_percentage: Closed01::new(0.20),
@@ -125,11 +124,11 @@ impl Configuration {
         if let Some(val) = parse_bool(&map, "edge_score") { cfg.edge_score = val; }
         if let Some(val) = parse_uint(&map, "population_size") { cfg.population_size = val as usize; }
 
-        if let Some(val) = parse_uint(&map, "w_modify_weight") { cfg.w_modify_weight = val as u32; }
-        if let Some(val) = parse_uint(&map, "w_add_node") { cfg.w_add_node = val as u32; }
-        if let Some(val) = parse_uint(&map, "w_add_connection") { cfg.w_add_connection = val as u32; }
-        if let Some(val) = parse_uint(&map, "w_enable_connection") { cfg.w_enable_connection = val as u32; }
-        if let Some(val) = parse_uint(&map, "w_delete_connection") { cfg.w_delete_connection = val as u32; }
+        if let Some(val) = parse_uint(&map, "w_modify_weight") { cfg.mutate_method_weighting.w_modify_weight = val as u32; }
+        if let Some(val) = parse_uint(&map, "w_add_node") { cfg.mutate_method_weighting.w_add_node = val as u32; }
+        if let Some(val) = parse_uint(&map, "w_add_connection") { cfg.mutate_method_weighting.w_add_connection = val as u32; }
+        if let Some(val) = parse_uint(&map, "w_enable_connection") { cfg.mutate_method_weighting.w_enable_connection = val as u32; }
+        if let Some(val) = parse_uint(&map, "w_delete_connection") { cfg.mutate_method_weighting.w_delete_connection = val as u32; }
 
         if let Some(val) = parse_float(&map, "elite_percentage") {
             assert!(val >= 0.0 && val <= 100.0);
@@ -242,13 +241,7 @@ impl Configuration {
         }
     }
 
-    pub fn mutate_weights(&self) -> MutateMethodWeighting {
-        MutateMethodWeighting {
-            w_modify_weight: self.w_modify_weight,
-            w_add_node: self.w_add_node,
-            w_add_connection: self.w_add_connection,
-            w_enable_connection: self.w_enable_connection,
-            w_delete_connection: self.w_delete_connection,
-        }
+    pub fn mutate_method_weighting(&self) -> MutateMethodWeighting {
+        self.mutate_method_weighting
     }
 }
