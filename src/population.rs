@@ -568,8 +568,8 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         // For each of the `n` niches, determine a centroid individual (index)
         let niche_centroids: Vec<usize> = distribute.map(|pt| {
                       // find a centroid for niche by looking around `pt` 
-                      let centroid_idx_f = rng.gen_range(pt - half_width, pt + half_width);
-                      let centroid_idx: usize = cmp::min(self.len(), cmp::max(0, probabilistic_round(centroid_idx_f, rng) as isize) as usize);
+                      let centroid_idx_f = rng.gen_range(pt - half_width, pt + half_width).max(0.0);
+                      let centroid_idx: usize = cmp::min(self.len()-1, probabilistic_round(centroid_idx_f, rng) as usize);
                       assert!(centroid_idx < self.len());
                       centroid_idx
                   }).collect();
