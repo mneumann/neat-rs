@@ -200,7 +200,8 @@ fn main() {
         }
 
         // partition into n niches.
-        niche_runner.partition_n_sorted(5, cfg.genome_compatibility(), &mut rng);
+        niche_runner.partition_n_sorted(cfg.num_niches(), cfg.genome_compatibility(), &mut rng);
+        //niche_runner.partition_threshold(cfg.compatibility_threshold(), cfg.genome_compatibility(), &mut rng);
         println!("partitioned into num niches: {}", niche_runner.num_niches());
 
         niche_runner.reproduce_global(cfg.population_size(),

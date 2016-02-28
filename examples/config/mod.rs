@@ -28,6 +28,8 @@ pub struct Configuration {
     genome_compatibility: GenomeDistance,
 
     stop_after_iterations: usize,
+
+    num_niches: usize,
 }
 
 fn conv_bool(s: &str) -> bool {
@@ -101,6 +103,8 @@ impl Configuration {
 
             stop_after_iterations: 100,
 
+            num_niches: 5,
+
             target_graph_file: None,
         }
     }
@@ -152,6 +156,8 @@ impl Configuration {
         }
 
         if let Some(val) = parse_uint(&map, "stop_after_iterations") { cfg.stop_after_iterations = val as usize; }
+
+        if let Some(val) = parse_uint(&map, "num_niches") { cfg.num_niches = val as usize; }
 
         if let Some(val) = parse_string(&map, "target_graph_file") { cfg.target_graph_file = Some(val); }
 
@@ -205,6 +211,10 @@ impl Configuration {
 
     pub fn population_size(&self) -> usize {
         self.population_size
+    }
+
+    pub fn num_niches(&self) -> usize {
+        self.num_niches
     }
 
     pub fn target_graph_file(&self) -> String {
