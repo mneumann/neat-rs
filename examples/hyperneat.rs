@@ -14,6 +14,7 @@ mod common;
 mod config;
 
 use neat::population::{Population, Unrated, Runner};
+use neat::traits::FitnessEval;
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater,
                                      ElementStrategy};
 use neat::fitness::Fitness;
@@ -88,10 +89,10 @@ struct FitnessEvaluator {
     node_count: NodeCount,
 }
 
-impl FitnessEvaluator {
+impl FitnessEval<Genome<Node>> for FitnessEvaluator {
     // A larger fitness means "better"
-    fn fitness(&self, genome: &Genome<Node>) -> f32 {
-        self.sim.fitness(&genome_to_graph(genome, &self.node_count))
+    fn fitness(&self, genome: &Genome<Node>) -> Fitness {
+        Fitness::new(self.sim.fitness(&genome_to_graph(genome, &self.node_count)) as f64)
     }
 }
 
@@ -186,7 +187,7 @@ fn main() {
         compatibility_threshold: cfg.compatibility_threshold(),
         compatibility: cfg.genome_compatibility(),
         mate: &mut mater,
-        fitness: &|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64),
+        fitness: &fitness_evaluator,
         _marker: PhantomData,
     };
 

@@ -1,4 +1,5 @@
 use rand::Rng;
+use fitness::Fitness;
 
 /// Measures the genetic distance. This can be applied on a variety of levels.
 /// For example, this is used to measure the genetic distance (or compatibility)
@@ -22,4 +23,10 @@ pub trait Mate<T: Genotype> {
                     prefer_mutate: bool,
                     rng: &mut R)
                     -> T;
+}
+
+/// Trait to calculate the fitness for a genome.
+
+pub trait FitnessEval<T: Genotype>: Sync {
+    fn fitness(&self, genome: &T) -> Fitness;
 }

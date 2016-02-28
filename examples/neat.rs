@@ -11,7 +11,8 @@ extern crate env_logger;
 mod common;
 mod config;
 
-use neat::population::{Population, Unrated, Runner};
+use neat::population::{Population, Unrated, Runner, NicheRunner};
+use neat::traits::{FitnessEval};
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
 use neat::fitness::Fitness;
 use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
@@ -41,10 +42,10 @@ struct FitnessEvaluator {
     sim: GraphSimilarity,
 }
 
-impl FitnessEvaluator {
+impl FitnessEval<Genome<Neuron>> for FitnessEvaluator {
     // A larger fitness means "better"
-    fn fitness(&self, genome: &Genome<Neuron>) -> f32 {
-        self.sim.fitness(&genome_to_graph(genome))
+    fn fitness(&self, genome: &Genome<Neuron>) -> Fitness {
+        Fitness::new(self.sim.fitness(&genome_to_graph(genome)) as f64)
     }
 }
 
@@ -130,7 +131,7 @@ fn main() {
         compatibility_threshold: cfg.compatibility_threshold(),
         compatibility: cfg.genome_compatibility(),
         mate: &mut mater,
-        fitness: &|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64),
+        fitness: &fitness_evaluator,
         _marker: PhantomData,
     };
 

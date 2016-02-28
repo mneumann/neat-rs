@@ -1,5 +1,5 @@
 use fitness::Fitness;
-use traits::{Genotype, Distance, Mate};
+use traits::{Genotype, Distance, Mate, FitnessEval};
 use prob::probabilistic_round;
 use distribute::DistributeInterval;
 
@@ -291,10 +291,10 @@ impl<T: Genotype + Debug> Population<T, Unrated> {
     }
 
     pub fn rate_seq<F>(mut self, f: &F) -> Population<T, Rated>
-        where F: Fn(&T) -> Fitness
+        where F: FitnessEval<T>
     {
         for ind in self.individuals.iter_mut() {
-            let fitness = f(&ind.genome);
+            let fitness = f.fitness(&ind.genome);
             ind.fitness = Some(fitness);
         }
         Population {
@@ -304,10 +304,10 @@ impl<T: Genotype + Debug> Population<T, Unrated> {
     }
 
     pub fn rate_par<F>(mut self, f: &F) -> Population<T, Rated>
-        where F: Sync + Fn(&T) -> Fitness
+        where F: FitnessEval<T>
     {
         self.individuals.par_iter_mut().for_each(|ind| {
-            let fitness = f(&ind.genome);
+            let fitness = f.fitness(&ind.genome);
             ind.fitness = Some(fitness);
         });
 
@@ -679,7 +679,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
 pub struct NicheRunner<'a, T, F>
 where
     T: Genotype + Debug + 'a,
-    F: Sync + Fn(&T) -> Fitness + 'a
+    F: FitnessEval<T> + 'a,
 {
     niches: Niches<T>,
     fitness: &'a F,
@@ -688,7 +688,7 @@ where
 impl<'a, T, F> NicheRunner<'a, T, F>
 where
     T: Genotype + Debug + 'a,
-    F: Sync + Fn(&T) -> Fitness + 'a
+    F: FitnessEval<T> + 'a,
 {
     pub fn new(fitness: &'a F) -> Self {
         NicheRunner {
@@ -706,7 +706,7 @@ pub struct Runner<'a, T, C, M, F>
     where T: Genotype + Debug,
           C: Distance<T> + 'a,
           M: Mate<T> + 'a,
-          F: Sync + Fn(&T) -> Fitness + 'a
+          F: FitnessEval<T> + 'a
 {
     // anticipated population size
     pub pop_size: usize,
@@ -727,7 +727,7 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
     where T: Genotype + Debug,
           C: Distance<T> + 'a,
           M: Mate<T> + 'a,
-          F: Sync + Fn(&T) -> Fitness + 'a
+          F: FitnessEval<T> + 'a
 {
     pub fn run<R, G>(&mut self,
                      initial_pop: Population<T, Unrated>,
