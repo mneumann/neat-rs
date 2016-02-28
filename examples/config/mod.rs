@@ -23,7 +23,9 @@ pub struct Configuration {
 
     elite_percentage: Closed01<f64>,
     selection_percentage: Closed01<f64>,
+
     compatibility_threshold: f64,
+    genome_compatibility: GenomeDistance,
 
     stop_after_iterations: usize,
 }
@@ -80,16 +82,22 @@ impl Configuration {
 
     pub fn new() -> Self {
         Configuration {
-            edge_score: false,
             population_size: 100,
+            edge_score: false,
             w_modify_weight: 100,
-            w_add_node: 1,
             w_add_connection: 10,
             w_delete_connection: 1,
+            w_add_node: 1,
 
             elite_percentage: Closed01::new(0.05),
             selection_percentage: Closed01::new(0.20),
+
             compatibility_threshold: 1.0,
+            genome_compatibility: GenomeDistance {
+                excess: 1.0,
+                disjoint: 1.0,
+                weight: 0.0,
+            },
 
             stop_after_iterations: 100,
 
@@ -129,6 +137,18 @@ impl Configuration {
         if let Some(val) = parse_float(&map, "compatibility_threshold") {
             assert!(val >= 0.0);
             cfg.compatibility_threshold = val;
+        }
+        if let Some(val) = parse_float(&map, "compatibility_excess") {
+            assert!(val >= 0.0);
+            cfg.genome_compatibility.excess= val;
+        }
+        if let Some(val) = parse_float(&map, "compatibility_disjoint") {
+            assert!(val >= 0.0);
+            cfg.genome_compatibility.disjoint= val;
+        }
+        if let Some(val) = parse_float(&map, "compatibility_weight") {
+            assert!(val >= 0.0);
+            cfg.genome_compatibility.weight= val;
         }
 
         if let Some(val) = parse_uint(&map, "stop_after_iterations") { cfg.stop_after_iterations = val as usize; }
@@ -195,12 +215,8 @@ impl Configuration {
         }
     }
 
-    pub fn genome_compatibility(&self) -> GenomeDistance {
-        GenomeDistance {
-            excess: 1.0,
-            disjoint: 1.0,
-            weight: 0.0,
-        }
+    pub fn genome_compatibility(&self) -> &GenomeDistance {
+        &self.genome_compatibility
     }
 
     pub fn probabilistic_crossover(&self) -> ProbabilisticCrossover {

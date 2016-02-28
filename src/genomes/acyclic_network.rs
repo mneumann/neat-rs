@@ -932,6 +932,7 @@ impl<NT: NodeType> Genome<NT> {
 }
 
 /// This is used to weight a link AlignmentMetric.
+#[derive(Debug)]
 pub struct GenomeDistance {
     pub excess: f64,
     pub disjoint: f64,

@@ -125,7 +125,7 @@ fn main() {
         elite_percentage: cfg.elite_percentage(),
         selection_percentage: cfg.selection_percentage(),
         compatibility_threshold: cfg.compatibility_threshold(),
-        compatibility: &cfg.genome_compatibility(),
+        compatibility: cfg.genome_compatibility(),
         mate: &mut mater,
         fitness: &|genome| Fitness::new(fitness_evaluator.fitness(genome) as f64),
         _marker: PhantomData,
@@ -134,8 +134,8 @@ fn main() {
     let max_iters = cfg.stop_after_iters();
     let good_fitness = cfg.stop_if_fitness_better_than();
     let (_iter, new_pop) = runner.run(initial_pop,
-                                     &|iter, pop| {
-                                         println!("iter: {}: best fitness: {:.3}", iter, pop.best_individual().unwrap().fitness().get());
+                                     &|iter, pop, last_num_niches| {
+                                         println!("iter: {}: best fitness: {:.3}; last num niches: {}", iter, pop.best_individual().unwrap().fitness().get(), last_num_niches);
                                          iter >= max_iters || pop.best_individual().unwrap().fitness().get() > good_fitness
                                      },
                                      &mut rng);

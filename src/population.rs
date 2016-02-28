@@ -68,6 +68,13 @@ impl<T: Genotype + Debug> Niches<T> {
         }
     }
 
+    pub fn single(pop: Population<T, Rated>) -> Self {
+        Niches {
+            total_individuals: pop.len(),
+            niches: vec![pop]
+        }
+    }
+
     pub fn into_iter(self) -> ::std::vec::IntoIter<Population<T, Rated>> {
         self.niches.into_iter()
     }
@@ -432,13 +439,15 @@ impl<'a, T, C, M, F> Runner<'a, T, C, M, F>
                      rng: &mut R)
                      -> (usize, Population<T, Rated>)
         where R: Rng,
-              G: Fn(usize, &Population<T, Rated>) -> bool
+              G: Fn(usize, &Population<T, Rated>, usize) -> bool
     {
         let mut iteration: usize = 0;
         let mut current_rated_pop = initial_pop.rate_par(self.fitness);
+        let mut last_number_of_niches = 1;
 
-        while !goal_condition(iteration, &current_rated_pop) {
+        while !goal_condition(iteration, &current_rated_pop, last_number_of_niches) {
             let niches = current_rated_pop.partition(rng, self.compatibility_threshold, self.compatibility);
+            last_number_of_niches = niches.num_niches();
             let (new_rated, new_unrated) = niches.reproduce(self.pop_size,
                                             self.elite_percentage,
                                             self.selection_percentage,
