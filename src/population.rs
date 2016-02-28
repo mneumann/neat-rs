@@ -17,6 +17,10 @@ pub struct Individual<T: Debug + Genotype> {
 }
 
 impl<T: Debug + Genotype> Individual<T> {
+    pub fn has_fitness(&self) -> bool {
+        self.fitness.is_some()
+    }
+
     pub fn fitness(&self) -> Fitness {
         self.fitness.unwrap()
     }
@@ -55,9 +59,47 @@ pub struct Population<T: Genotype + Debug, R: Rating> {
 }
 
 #[derive(Debug)]
+pub struct Niche<T: Genotype + Debug> {
+    population: Population<T, Rated>,
+
+    // if `Some(index)`, the individual with `index` is used as center of the niche.
+    // newly inserted individuals are compared with it.
+
+    centroid: Option<usize>,
+}
+
+#[derive(Debug)]
 pub struct Niches<T: Genotype + Debug> {
     total_individuals: usize,
-    niches: Vec<Population<T, Rated>>,
+    niches: Vec<Niche<T>>,
+}
+
+
+impl<T: Genotype + Debug> Niche<T> {
+    fn from_population(pop: Population<T, Rated>) -> Self {
+        assert!(pop.len() > 0);
+        Niche {
+            population: pop,
+            centroid: None
+        }
+    }
+
+    fn mean_fitness(&self) -> Fitness {
+        self.population.mean_fitness()
+    }
+
+    fn add_individual(&mut self, ind: Individual<T>) {
+        assert!(ind.has_fitness());
+        self.population.add_individual(ind);
+    }
+
+    fn from_individual(ind: Individual<T>) -> Self {
+        assert!(ind.has_fitness());
+
+        let mut pop = Population::new();
+        pop.add_individual(ind);
+        Niche::from_population(pop)
+    }
 }
 
 impl<T: Genotype + Debug> Niches<T> {
@@ -68,12 +110,14 @@ impl<T: Genotype + Debug> Niches<T> {
         }
     }
 
-    /// Creates a single niche from a `Population`.
+    /// Creates a `Niches` with a single niche containing the whole `Population`.
 
-    pub fn single(pop: Population<T, Rated>) -> Self {
+    pub fn from_single_population(pop: Population<T, Rated>) -> Self {
+        let total = pop.len();
+        let niche = Niche::from_population(pop);
         Niches {
-            total_individuals: pop.len(),
-            niches: vec![pop],
+            total_individuals: total,
+            niches: vec![niche],
         }
     }
 
@@ -84,24 +128,26 @@ impl<T: Genotype + Debug> Niches<T> {
         let tot = self.total_individuals;
 
         let mut iter = self.niches.into_iter();
-        let mut pop = iter.next().unwrap();
+        let mut pop = iter.next().unwrap().population;
 
         for niche in iter {
-            pop.append(niche);
+            pop.append(niche.population);
         }
 
         assert!(tot == pop.len());
         pop
     }
 
+    /*
     pub fn into_iter(self) -> ::std::vec::IntoIter<Population<T, Rated>> {
         self.niches.into_iter()
     }
+    */
 
     /// The sum of all "mean fitnesses" of all niches.
 
     fn total_mean(&self) -> Fitness {
-        self.niches.iter().map(|ind| ind.mean_fitness()).sum()
+        self.niches.iter().map(|niche| niche.population.mean_fitness()).sum()
     }
 
     /// Total number of individuals
@@ -116,9 +162,10 @@ impl<T: Genotype + Debug> Niches<T> {
         self.niches.len()
     }
 
-    /// Add an individual to one of the niches.
+    /// Add an individual to the first matching niche (given by the `compatibility_threshold` and
+    /// `compatibility` function. If no niche matches, create a new.
 
-    pub fn add_individual<R, C>(&mut self,
+    pub fn insert_first_matching<R, C>(&mut self,
                                 ind: Individual<T>,
                                 compatibility_threshold: f64,
                                 compatibility: &C,
@@ -130,7 +177,7 @@ impl<T: Genotype + Debug> Niches<T> {
 
         for niche in self.niches.iter_mut() {
             // Is this genome compatible with this niche? Test against a random genome.
-            let compatible = match rng.choose(&niche.individuals) {
+            let compatible = match rng.choose(&niche.population.individuals) {
                 Some(probe) => {
                     compatibility.distance(&probe.genome, &ind.genome) < compatibility_threshold
                 }
@@ -143,9 +190,7 @@ impl<T: Genotype + Debug> Niches<T> {
             }
         }
         // if no compatible niche was found, create a new niche containing this genome.
-        let mut new_niche = Population::new();
-        new_niche.add_individual(ind);
-        self.niches.push(new_niche);
+        self.niches.push(Niche::from_individual(ind));
     }
 
     /// Reproduce individuals of all niches. Each niche is allowed to reproduce a number of
@@ -180,7 +225,7 @@ impl<T: Genotype + Debug> Niches<T> {
         let mut new_unrated_population: Population<T, Unrated> = Population::new();
         let mut new_rated_population: Population<T, Rated> = Population::new();
 
-        for niche in self.into_iter() {
+        for niche in self.niches.into_iter() {
             let percentage_of_population: f64 = if total_mean.get() == 0.0 {
                 // all individuals have a fitness of 0.0.
                 // we will equally allow each niche to procude offspring.
@@ -194,7 +239,7 @@ impl<T: Genotype + Debug> Niches<T> {
 
             let niche_size = new_pop_size as f64 * percentage_of_population;
 
-            niche.reproduce_into(niche_size,
+            niche.population.reproduce_into(niche_size,
                                  elite_percentage,
                                  selection_percentage,
                                  mate,
@@ -458,7 +503,7 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         let mut niches = Niches::new();
 
         for ind in self.individuals.into_iter() {
-            niches.add_individual(ind, compatibility_threshold, compatibility, rng);
+            niches.insert_first_matching(ind, compatibility_threshold, compatibility, rng);
         }
 
         niches
