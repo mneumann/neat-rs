@@ -767,6 +767,24 @@ impl<NT: NodeType> Genome<NT> {
         return (total_nodes_added, total_links_added);
     }
 
+    /// Mutate the genome by enabling a random disabled link.
+    ///
+    /// Note that we don't have to check for the introduction of cycles,
+    /// as the cycle detection takes disabled links into account.
+    ///
+    /// Return `true` if the genome was modified. Otherwise `false`.
+
+    pub fn mutate_enable_link<R: Rng>(&mut self, rng: &mut R) -> bool {
+        match self.network.random_inactive_link_index(rng) {
+            Some(idx) => {
+                let ok = self.network.enable_link_index(idx);
+                assert!(ok);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Mutate the genome by adding a random link which is valid and does not introduce a cycle.
     ///
     /// Return `true` if the genome was modified. Otherwise `false`.
@@ -1017,6 +1035,9 @@ impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
                 MutateMethod::AddConnection => {
                     let link_weight = self.element_strategy.link_weight_range().random_weight(rng);
                     let _modified = offspring.mutate_add_link(link_weight, self.global_cache, rng);
+                }
+                MutateMethod::EnableConnection => {
+                    let _modified = offspring.mutate_enable_link(rng);
                 }
                 MutateMethod::DeleteConnection => {
                     let _modified = offspring.mutate_delete_link(rng);

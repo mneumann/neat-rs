@@ -7,6 +7,7 @@ use rand::distributions::{WeightedChoice, Weighted, IndependentSample};
 pub enum MutateMethod {
     ModifyWeight,
     AddConnection,
+    EnableConnection,
     DeleteConnection,
     AddNode,
 }
@@ -15,6 +16,7 @@ pub enum MutateMethod {
 pub struct MutateMethodWeighting {
     pub w_modify_weight: u32,
     pub w_add_connection: u32,
+    pub w_enable_connection: u32,
     pub w_delete_connection: u32,
     pub w_add_node: u32,
 }
@@ -28,6 +30,10 @@ impl MutateMethod {
                          Weighted {
                              weight: p.w_add_connection,
                              item: MutateMethod::AddConnection,
+                         },
+                         Weighted {
+                             weight: p.w_enable_connection,
+                             item: MutateMethod::EnableConnection,
                          },
                          Weighted {
                              weight: p.w_delete_connection,

@@ -1,3 +1,7 @@
+- [ ] Start with one niche. Reproduce within that niche. If the niche
+      does not improve for 10 generations, kill that niche and distribute
+      it's individuals to other niches.
+- [ ] Take disabled links into account during AddConnection mutation.
 - [ ] Adaptive compatibility threshold.
 - [ ] Automatic selection of a good `compatibility_threshold` by sampling
       the population. Split into `n` niches.
