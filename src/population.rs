@@ -83,6 +83,32 @@ impl<T: Genotype + Debug> Niche<T> {
         }
     }
 
+    /// Calculate the new size of this niche. Depends on the `total_mean` fitness of all niches
+    /// and this niche's own mean_fitness.
+    ///
+    /// `num_niches`: Total number of niches.
+    /// `global_pop_size`: Size of the global population.
+
+    pub fn determine_new_niche_size(&self, total_mean: Fitness, num_niches: usize, global_pop_size: usize) -> f64 {
+        assert!(num_niches > 0);
+        assert!(global_pop_size > 0);
+
+        let percentage_of_population: f64 = if total_mean.get() == 0.0 {
+            // all individuals have a fitness of 0.0.
+            // we will equally allow each niche to procude offspring.
+            1.0 / (num_niches as f64)
+        } else {
+            (self.mean_fitness() / total_mean).get()
+        };
+
+        // calculate new size of niche
+        assert!(percentage_of_population >= 0.0 && percentage_of_population <= 1.0);
+
+        let new_niche_size = global_pop_size as f64 * percentage_of_population;
+
+        return new_niche_size;
+    }
+
     pub fn len(&self) -> usize {
         self.population.len()
     }
@@ -253,19 +279,7 @@ impl<T: Genotype + Debug> Niches<T> {
         let mut new_rated_population: Population<T, Rated> = Population::new();
 
         for niche in self.niches.into_iter() {
-            let percentage_of_population: f64 = if total_mean.get() == 0.0 {
-                // all individuals have a fitness of 0.0.
-                // we will equally allow each niche to procude offspring.
-                1.0 / (num_niches as f64)
-            } else {
-                (niche.mean_fitness() / total_mean).get()
-            };
-
-            // calculate new size of niche, and size of elites, and selection size.
-            assert!(percentage_of_population >= 0.0 && percentage_of_population <= 1.0);
-
-            let niche_size = new_pop_size as f64 * percentage_of_population;
-
+            let niche_size = niche.determine_new_niche_size(total_mean, num_niches, new_pop_size);
             niche.population.reproduce_into(niche_size,
                                             elite_percentage,
                                             selection_percentage,
