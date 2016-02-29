@@ -226,34 +226,34 @@ impl<NT: NodeType> Genome<NT> {
                                            // Both nodes are topological identical. So the link innovations can
                                            // also match up.
                                            align_sorted_iterators(left_network.link_ref_iter_for_node(left_node_index),
-                                           right_network.link_ref_iter_for_node(right_node_index),
-                                           |left_link_ref, right_link_ref| 
+                                               right_network.link_ref_iter_for_node(right_node_index),
+                                               |left_link_ref, right_link_ref| 
                                                Ord::cmp(&left_link_ref.external_link_id(),
-                                                        &right_link_ref.external_link_id()),
-                                            |link_alignment| {
-                                                match link_alignment { 
-                                                    Alignment::Match(left_link_ref, right_link_ref) => {
-                                                        f(Alignment::Match(left_link_ref, right_link_ref));
-                                                    }
-                                                    Alignment::Disjoint(link_ref, left_or_right) => {
-                                                        f(Alignment::Disjoint(link_ref, left_or_right));
-                                                    }
-                                                    Alignment::Excess(left_link_ref, pos @ LeftOrRight::Left) => {
-                                                        if right_link_innov_range.contains(&left_link_ref.external_link_id().into()) {
-                                                             f(Alignment::Disjoint(left_link_ref, pos));
-                                                        } else {
-                                                             f(Alignment::Excess(left_link_ref, pos));
-                                                        }
-                                                    }
-                                                    Alignment::Excess(right_link_ref, pos @ LeftOrRight::Right) => {
-                                                        if left_link_innov_range.contains(&right_link_ref.external_link_id().into()) {
-                                                             f(Alignment::Disjoint(right_link_ref, pos));
-                                                        } else {
-                                                             f(Alignment::Excess(right_link_ref, pos));
-                                                        }
-                                                    }
-                                                }
-                                            });
+                                               &right_link_ref.external_link_id()),
+                                               |link_alignment| {
+                                                   match link_alignment { 
+                                                       Alignment::Match(left_link_ref, right_link_ref) => {
+                                                           f(Alignment::Match(left_link_ref, right_link_ref));
+                                                       }
+                                                       Alignment::Disjoint(link_ref, left_or_right) => {
+                                                           f(Alignment::Disjoint(link_ref, left_or_right));
+                                                       }
+                                                       Alignment::Excess(left_link_ref, pos @ LeftOrRight::Left) => {
+                                                           if right_link_innov_range.contains(&left_link_ref.external_link_id().into()) {
+                                                               f(Alignment::Disjoint(left_link_ref, pos));
+                                                           } else {
+                                                               f(Alignment::Excess(left_link_ref, pos));
+                                                           }
+                                                       }
+                                                       Alignment::Excess(right_link_ref, pos @ LeftOrRight::Right) => {
+                                                           if left_link_innov_range.contains(&right_link_ref.external_link_id().into()) {
+                                                               f(Alignment::Disjoint(right_link_ref, pos));
+                                                           } else {
+                                                               f(Alignment::Excess(right_link_ref, pos));
+                                                           }
+                                                       }
+                                                   }
+                                               });
                                        }
 
                                        // in general, if a node is disjoint (or excess), it's link innovations cannot match up!
@@ -315,31 +315,31 @@ impl<NT: NodeType> Genome<NT> {
                                            // Both nodes are topological identical. So the link innovations can
                                            // also match up.
                                            align_sorted_iterators(left_network.link_iter_for_node(left_node_index),
-                                           right_network.link_iter_for_node(right_node_index),
-                                           |&(_, left_link), &(_, right_link)| 
+                                               right_network.link_iter_for_node(right_node_index),
+                                               |&(_, left_link), &(_, right_link)| 
                                                Ord::cmp(&left_link.external_link_id(),
-                                                        &right_link.external_link_id()),
-                                            |link_alignment| {
-                                                match link_alignment { 
-                                                    Alignment::Match((_, left_link), (_, right_link)) => {
-                                                        // we have a link match!
-                                                        metric.link_metric.matching += 1;
+                                               &right_link.external_link_id()),
+                                               |link_alignment| {
+                                                   match link_alignment { 
+                                                       Alignment::Match((_, left_link), (_, right_link)) => {
+                                                           // we have a link match!
+                                                           metric.link_metric.matching += 1;
 
-                                                        // add up the weight distance
-                                                        metric.link_metric.weight_distance += (left_link.weight().0 - right_link.weight().0).abs();
-                                                    }
-                                                    Alignment::Disjoint(..) => {
-                                                        // the link is locally disjoint (list of links of the node) 
-                                                        metric.link_metric.disjoint += 1;
-                                                    }
-                                                    Alignment::Excess((_, left_link), LeftOrRight::Left) => {
-                                                        count_disjoint_or_excess(&mut metric.link_metric, &right_link_innov_range, left_link.external_link_id().into());
-                                                    }
-                                                    Alignment::Excess((_, right_link), LeftOrRight::Right) => {
-                                                        count_disjoint_or_excess(&mut metric.link_metric, &left_link_innov_range, right_link.external_link_id().into());
-                                                    }
-                                                }
-                                            });
+                                                           // add up the weight distance
+                                                           metric.link_metric.weight_distance += (left_link.weight().0 - right_link.weight().0).abs();
+                                                       }
+                                                       Alignment::Disjoint(..) => {
+                                                           // the link is locally disjoint (list of links of the node) 
+                                                           metric.link_metric.disjoint += 1;
+                                                       }
+                                                       Alignment::Excess((_, left_link), LeftOrRight::Left) => {
+                                                           count_disjoint_or_excess(&mut metric.link_metric, &right_link_innov_range, left_link.external_link_id().into());
+                                                       }
+                                                       Alignment::Excess((_, right_link), LeftOrRight::Right) => {
+                                                           count_disjoint_or_excess(&mut metric.link_metric, &left_link_innov_range, right_link.external_link_id().into());
+                                                       }
+                                                   }
+                                               });
                                        }
 
                                        // in general, if a node is disjoint (or excess), it's link innovations cannot match up!
@@ -806,9 +806,9 @@ impl<NT: NodeType> Genome<NT> {
 
                 // Add new link to the offspring genome
                 self.network.add_link(source_node_idx,
-                                      target_node_idx,
-                                      link_weight,
-                                      AnyInnovation(cache.get_or_create_link_innovation(ext_source_node_id, ext_target_node_id).0));
+                                                target_node_idx,
+                                                link_weight,
+                                                AnyInnovation(cache.get_or_create_link_innovation(ext_source_node_id, ext_target_node_id).0));
                 return true;
             }
             None => {
@@ -1003,6 +1003,45 @@ pub struct Mater<'a, N, S, C>
     pub _n: PhantomData<N>,
 }
 
+impl<'a, N, S, C> Mater<'a, N, S, C>
+    where N: NodeType + 'a,
+          S: ElementStrategy<N> + 'a,
+          C: GlobalCache + 'a
+{
+    fn mutate<R: Rng>(&mut self,
+                      offspring: &mut Genome<N>,
+                      mutate_method: MutateMethod,
+                      rng: &mut R)
+                      -> bool {
+        match mutate_method {
+            MutateMethod::ModifyWeight => {
+                let modifications =
+                    offspring.mutate_link_weights_uniformly(self.p_mutate_element,
+                                                            &self.weight_perturbance,
+                                                            &self.element_strategy
+                                                                 .link_weight_range(),
+                                                            rng);
+
+                modifications > 0
+            }
+            MutateMethod::AddConnection => {
+                let link_weight = self.element_strategy
+                                      .link_weight_range()
+                                      .random_weight(rng);
+                offspring.mutate_add_link(link_weight, self.global_cache, rng)
+            }
+            MutateMethod::EnableConnection => offspring.mutate_enable_link(rng),
+            MutateMethod::DeleteConnection => offspring.mutate_delete_link(rng),
+            MutateMethod::AddNode => {
+                let second_link_weight = self.element_strategy.full_link_weight();
+                let node_type = self.element_strategy.random_node_type(rng);
+                offspring.mutate_add_node(node_type, second_link_weight, self.global_cache, rng)
+            }
+        }
+    }
+}
+
+
 impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
     where N: NodeType + 'a,
           S: ElementStrategy<N> + 'a,
@@ -1020,39 +1059,33 @@ impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
             Genome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
         } else {
             // mutate
-            let mut offspring = parent_left.clone();
-
             let mutate_method = MutateMethod::random_with(&self.mutate_weights, rng);
-            match mutate_method {
-                MutateMethod::ModifyWeight => {
-                    let _modifications =
-                        offspring.mutate_link_weights_uniformly(self.p_mutate_element,
-                                                                &self.weight_perturbance,
-                                                                &self.element_strategy
-                                                                     .link_weight_range(),
-                                                                rng);
-                }
-                MutateMethod::AddConnection => {
-                    let link_weight = self.element_strategy.link_weight_range().random_weight(rng);
-                    let _modified = offspring.mutate_add_link(link_weight, self.global_cache, rng);
-                }
-                MutateMethod::EnableConnection => {
-                    let _modified = offspring.mutate_enable_link(rng);
-                }
-                MutateMethod::DeleteConnection => {
-                    let _modified = offspring.mutate_delete_link(rng);
-                }
-                MutateMethod::AddNode => {
-                    let second_link_weight = self.element_strategy.full_link_weight();
-                    let node_type = self.element_strategy.random_node_type(rng);
-                    let _modified = offspring.mutate_add_node(node_type,
-                                                              second_link_weight,
-                                                              self.global_cache,
-                                                              rng);
+
+            {
+                let mut offspring = parent_left.clone();
+
+                let modified = self.mutate(&mut offspring, mutate_method, rng);
+
+                if modified {
+                    return offspring;
                 }
             }
 
-            return offspring;
+            info!("no change in mutate left genome. mutate_method: {:?}", mutate_method);
+
+            {
+                let mut offspring = parent_right.clone();
+
+                let modified = self.mutate(&mut offspring, mutate_method, rng);
+
+                if modified {
+                    return offspring;
+                }
+
+                info!("no change in mutate right genome");
+
+                return offspring;
+            }
         }
     }
 }
