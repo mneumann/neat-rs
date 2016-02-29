@@ -126,6 +126,7 @@ fn main() {
 
     let mut niche_runner = NicheRunner::new(&fitness_evaluator);
 
+    // We start with one global niche.
     niche_runner.add_unrated_population_as_niche(initial_pop);
 
     while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
@@ -141,14 +142,33 @@ fn main() {
         }
 
         // partition into n niches.
-        niche_runner.partition_n_sorted(cfg.num_niches(), cfg.genome_compatibility(), &mut rng);
-        println!("partitioned into num niches: {}", niche_runner.num_niches());
-
+        // niche_runner.partition_n_sorted(cfg.num_niches(), cfg.genome_compatibility(), &mut rng);
+        // println!("partitioned into num niches: {}", niche_runner.num_niches());
+        /*
         niche_runner.reproduce_global(cfg.population_size(),
                                       cfg.elite_percentage(),
                                       cfg.selection_percentage(),
                                       &mut mater,
                                       &mut rng);
+                                      */
+
+        println!("num niches: {}", niche_runner.num_niches());
+
+        niche_runner.reproduce_niche_locally(cfg.population_size(),
+                                      cfg.elite_percentage(),
+                                      cfg.selection_percentage(),
+                                      &mut mater,
+                                      &mut rng);
+
+        // If niches do not improve t=10 timesteps, redistribute them to
+        // other niches.
+        let redistributes = niche_runner.redistribute_niches_with_no_improvement(0.05, 10, 
+                                                             cfg.compatibility_threshold(),
+                                                             cfg.genome_compatibility(),
+                                                             &mut rng);
+        if redistributes > 0 {
+            println!("{} niches redistributed", redistributes);
+        }
     }
 
     let final_pop = niche_runner.into_population().sort();

@@ -60,28 +60,53 @@ pub struct Population<T: Genotype + Debug, R: Rating> {
 }
 
 #[derive(Debug)]
-pub struct Niche<T: Genotype + Debug> {
-    population: Population<T, Rated>,
-
-    // if `Some(index)`, the individual with `index` is used as center of the niche.
-    // newly inserted individuals are compared with it.
-    centroid: Option<usize>,
-}
-
-#[derive(Debug)]
 pub struct Niches<T: Genotype + Debug> {
     total_individuals: usize,
     niches: Vec<Niche<T>>,
 }
+
+#[derive(Debug)]
+pub struct Niche<T: Genotype + Debug> {
+    population: Population<T, Rated>,
+
+    // Stores a log of mean fitness values over time. An entry is added each time
+    // `log_mean_fitness()` is called.
+    mean_fitness_log: Vec<Fitness>,
+}
+
 
 impl<T: Genotype + Debug> Niche<T> {
     fn from_population(pop: Population<T, Rated>) -> Self {
         assert!(pop.len() > 0);
         Niche {
             population: pop,
-            centroid: None,
+            mean_fitness_log: Vec::new(),
         }
     }
+
+    /// Logs the mean fitness
+
+    fn log_mean_fitness(&mut self) {
+        let mean_fitness = self.mean_fitness();
+        self.mean_fitness_log.push(mean_fitness);
+    }
+
+    fn mean_fitness_log(&self) -> &[Fitness] {
+        &self.mean_fitness_log
+    }
+
+    pub fn mean_fitness_improvement(&self, timesteps: usize) -> Option<f64> {
+        if timesteps > self.mean_fitness_log.len() {
+            None
+        } else {
+            let last_fitness = self.mean_fitness_log[self.mean_fitness_log.len()-1].get();
+            let ago_fitness  = self.mean_fitness_log[self.mean_fitness_log.len()-timesteps].get();
+
+            let improvement = last_fitness - ago_fitness;
+            Some(improvement)
+        }
+    }
+
 
     /// Calculate the new size of this niche. Depends on the `total_mean` fitness of all niches
     /// and this niche's own mean_fitness.
@@ -89,7 +114,11 @@ impl<T: Genotype + Debug> Niche<T> {
     /// `num_niches`: Total number of niches.
     /// `global_pop_size`: Size of the global population.
 
-    pub fn determine_new_niche_size(&self, total_mean: Fitness, num_niches: usize, global_pop_size: usize) -> f64 {
+    pub fn determine_new_niche_size(&self,
+                                    total_mean: Fitness,
+                                    num_niches: usize,
+                                    global_pop_size: usize)
+                                    -> f64 {
         assert!(num_niches > 0);
         assert!(global_pop_size > 0);
 
@@ -109,6 +138,34 @@ impl<T: Genotype + Debug> Niche<T> {
         return new_niche_size;
     }
 
+    /// Reproduces a niche locally
+
+    pub fn reproduce_locally<M, R, F>(&mut self,
+                                      new_niche_size: f64,
+                                      elite_percentage: Closed01<f64>,
+                                      selection_percentage: Closed01<f64>,
+                                      mate: &mut M,
+                                      fitness_eval: &F,
+                                      rng: &mut R)
+        where M: Mate<T>,
+              R: Rng,
+              F: FitnessEval<T>
+    {
+        let old_population = mem::replace(&mut self.population, Population::new());
+        let mut new_unrated_population: Population<T, Unrated> = Population::new();
+
+        old_population.reproduce_into(new_niche_size,
+                                      elite_percentage,
+                                      selection_percentage,
+                                      mate,
+                                      &mut new_unrated_population,
+                                      &mut self.population,
+                                      rng);
+
+        self.population.append(new_unrated_population.rate_par(fitness_eval));
+    }
+
+
     pub fn len(&self) -> usize {
         self.population.len()
     }
@@ -121,14 +178,10 @@ impl<T: Genotype + Debug> Niche<T> {
         self.population.mean_fitness()
     }
 
-    /// Returns a reference to the centroid element if specified, or else
-    /// a random element of the niche.
+    /// Returns a reference to a random element of the niche.
 
-    fn centroid_or_else_random<R: Rng>(&self, rng: &mut R) -> &Individual<T> {
-        self.centroid
-            .and_then(|i| self.population.individuals.get(i))
-            .or_else(|| rng.choose(&self.population.individuals))
-            .unwrap()
+    fn random_individual<R: Rng>(&self, rng: &mut R) -> &Individual<T> {
+        rng.choose(&self.population.individuals).unwrap()
     }
 
     fn add_individual(&mut self, ind: Individual<T>) {
@@ -152,6 +205,34 @@ impl<T: Genotype + Debug> Niches<T> {
             niches: Vec::new(),
         }
     }
+
+    /// Insert the individuals of `population` into the first matching niche, according to the
+    /// `compatibility` and `compatibility_threshold`.
+
+    pub fn insert_population_threshold<C, R, RA>(&mut self,
+                                                 population: Population<T, RA>,
+                                                 compatibility_threshold: f64,
+                                                 compatibility: &C,
+                                                 rng: &mut R)
+        where C: Distance<T>,
+              R: Rng,
+              RA: IsRated
+    {
+        for ind in population.individuals.into_iter() {
+            self.total_individuals += 1;
+            if let Some(niche) = self.find_first_matching_niche(&ind,
+                                                                compatibility_threshold,
+                                                                compatibility,
+                                                                rng) {
+                niche.add_individual(ind);
+                continue;
+            }
+
+            // if no compatible niche was found, create a new niche containing this individual.
+            self.add_niche(Niche::from_individual(ind));
+        }
+    }
+
 
     pub fn best_individual(&self) -> &Individual<T> {
         assert!(self.niches.len() > 0);
@@ -235,10 +316,10 @@ impl<T: Genotype + Debug> Niches<T> {
     {
         for niche in self.niches.iter_mut() {
 
-            // Is this genome compatible with this niche? Compare `ind` against the centroid of
-            // `niche` or else a random individual of that `niche`.
+            // Is this genome compatible with this niche? Compare `ind` against a random individual
+            // of that `niche`.
 
-            if compatibility.distance(&niche.centroid_or_else_random(rng).genome, &ind.genome) <
+            if compatibility.distance(&niche.random_individual(rng).genome, &ind.genome) <
                compatibility_threshold {
                 return Some(niche);
             }
@@ -375,20 +456,7 @@ impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
               R: Rng
     {
         let mut niches = Niches::new();
-
-        for ind in self.individuals.into_iter() {
-            if let Some(niche) = niches.find_first_matching_niche(&ind,
-                                                                  compatibility_threshold,
-                                                                  compatibility,
-                                                                  rng) {
-                niche.add_individual(ind);
-                continue;
-            }
-
-            // if no compatible niche was found, create a new niche containing this individual.
-            niches.add_niche(Niche::from_individual(ind));
-        }
-
+        niches.insert_population_threshold(self, compatibility_threshold, compatibility, rng);
         niches
     }
 
@@ -774,6 +842,72 @@ impl<'a, T, F> NicheRunner<'a, T, F>
     {
         let niches = mem::replace(&mut self.niches, Niches::new());
         self.niches = niches.collapse().sort().partition_n(n, compatibility, rng);
+    }
+
+    /// If a niche does not show a signification improvement > `improvement_threshold` within the last `timesteps`
+    /// redistribute it's individuals to the remaining niches.
+
+    pub fn redistribute_niches_with_no_improvement<C,R>(&mut self,
+                                                   improvement_threshold: f64,
+                                                   timesteps: usize,
+                                                   compatibility_threshold: f64,
+                                                   compatibility: &C,
+                                                   rng: &mut R) -> usize
+        where C: Distance<T>,
+              R: Rng
+    {
+        assert!(timesteps > 0);
+
+        // record mean_fitness for all niches. 
+        
+        {
+            for niche in self.niches.niches.iter_mut() {
+                niche.log_mean_fitness();
+            }
+        }
+        
+        let old_niches = mem::replace(&mut self.niches, Niches::new());
+        let mut niches_to_redistribute = Vec::new();  
+
+        for niche in old_niches.niches.into_iter() {
+            match niche.mean_fitness_improvement(timesteps) {
+                Some(niche_improvement) if niche_improvement < improvement_threshold => {
+                    // this niche did not improve good enough
+                    niches_to_redistribute.push(niche);
+                }
+                _ => {
+                    // keep it as is
+                    self.niches.add_niche(niche);
+                }
+            }
+        }
+
+        let redistributes = niches_to_redistribute.len();
+        for niche in niches_to_redistribute {
+            self.niches.insert_population_threshold(niche.population, compatibility_threshold, compatibility, rng);
+        }
+        redistributes
+    }
+
+    /// Reproduces offspring within the niches. The niches are not destroyed.
+
+    pub fn reproduce_niche_locally<M, R>(&mut self,
+                                         new_total_pop_size: usize,
+                                         elite_percentage: Closed01<f64>,
+                                         selection_percentage: Closed01<f64>,
+                                         mate: &mut M,
+                                         rng: &mut R)
+        where M: Mate<T>,
+              R: Rng
+    {
+        let total_mean = self.niches.total_mean();
+        let num_niches = self.niches.num_niches();
+
+        // XXX: do in parallel
+        for niche in self.niches.niches.iter_mut() {
+            let new_niche_size = niche.determine_new_niche_size(total_mean, num_niches, new_total_pop_size);
+            niche.reproduce_locally(new_niche_size, elite_percentage, selection_percentage, mate, self.fitness, rng);
+        }
     }
 
     pub fn reproduce_global<M, R>(&mut self,
