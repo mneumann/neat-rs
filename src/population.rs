@@ -60,12 +60,6 @@ pub struct Population<T: Genotype + Debug, R: Rating> {
 }
 
 #[derive(Debug)]
-pub struct Niches<T: Genotype + Debug> {
-    total_individuals: usize,
-    niches: Vec<Niche<T>>,
-}
-
-#[derive(Debug)]
 pub struct Niche<T: Genotype + Debug> {
     population: Population<T, Rated>,
 
@@ -198,10 +192,14 @@ impl<T: Genotype + Debug> Niche<T> {
     }
 }
 
+#[derive(Debug)]
+pub struct Niches<T: Genotype + Debug> {
+    niches: Vec<Niche<T>>,
+}
+
 impl<T: Genotype + Debug> Niches<T> {
     pub fn new() -> Self {
         Niches {
-            total_individuals: 0,
             niches: Vec::new(),
         }
     }
@@ -219,7 +217,6 @@ impl<T: Genotype + Debug> Niches<T> {
               RA: IsRated
     {
         for ind in population.individuals.into_iter() {
-            self.total_individuals += 1;
             if let Some(niche) = self.find_first_matching_niche(&ind,
                                                                 compatibility_threshold,
                                                                 compatibility,
@@ -253,7 +250,6 @@ impl<T: Genotype + Debug> Niches<T> {
         let total = pop.len();
         let niche = Niche::from_population(pop);
         Niches {
-            total_individuals: total,
             niches: vec![niche],
         }
     }
@@ -262,7 +258,7 @@ impl<T: Genotype + Debug> Niches<T> {
 
     pub fn collapse(self) -> Population<T, Rated> {
         assert!(!self.niches.is_empty());
-        let tot = self.total_individuals;
+        let tot = self.num_individuals();
 
         let mut iter = self.niches.into_iter();
         let mut pop = iter.next().unwrap().population;
@@ -281,10 +277,10 @@ impl<T: Genotype + Debug> Niches<T> {
         self.niches.iter().map(|niche| niche.population.mean_fitness()).sum()
     }
 
-    /// Total number of individuals
+    /// Calculates the total number of individuals of all niches.
 
     pub fn num_individuals(&self) -> usize {
-        self.total_individuals
+        self.niches.iter().map(|niche| niche.len()).sum()
     }
 
     /// Number of niches
@@ -297,7 +293,6 @@ impl<T: Genotype + Debug> Niches<T> {
 
     pub fn add_niche(&mut self, niche: Niche<T>) {
         assert!(niche.len() > 0);
-        self.total_individuals += niche.len();
         self.niches.push(niche);
     }
 
