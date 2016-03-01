@@ -8,9 +8,12 @@ extern crate asexp;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
+extern crate criterion_stats;
+
 mod common;
 mod config;
 
+//use criterion_stats::univariate::Sample;
 use neat::population::{Population, Unrated, NicheRunner};
 use neat::traits::{FitnessEval};
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
@@ -106,13 +109,6 @@ fn main() {
         genome
     };
 
-    let mut initial_pop = Population::<_, Unrated>::new();
-
-    for _ in 0..cfg.population_size() {
-        initial_pop.add_genome(Box::new(template_genome.clone()));
-    }
-    assert!(initial_pop.len() == cfg.population_size());
-
     let mut mater = Mater {
         p_crossover: cfg.p_crossover(),
         p_crossover_detail: cfg.probabilistic_crossover(),
@@ -126,8 +122,17 @@ fn main() {
 
     let mut niche_runner = NicheRunner::new(&fitness_evaluator);
 
-    // We start with one global niche.
-    niche_runner.add_unrated_population_as_niche(initial_pop);
+    let niche_size = cfg.population_size() / cfg.num_niches(); 
+
+    for _ in 0..cfg.num_niches() {
+        let mut initial_pop = Population::<_, Unrated>::new();
+
+        for _ in 0..niche_size {
+            initial_pop.add_genome(Box::new(template_genome.clone()));
+        }
+
+        niche_runner.add_unrated_population_as_niche(initial_pop);
+    }
 
     while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
         println!("iteration: {}", niche_runner.current_iteration());
@@ -140,6 +145,20 @@ fn main() {
             println!("Premature abort.");
             break;
         }
+
+        //let samples = niche_runner.inter_niche_compatibility_distance(100, cfg.genome_compatibility(), &mut rng);
+        //println!("samples: {:?}", samples);
+
+
+        //let samples = Sample::new(&samples);
+        //println!("mean: {:?}", samples.mean());
+        //println!("median_abs_dev: {:?}", samples.median_abs_dev(None));
+        //println!("median_abs_dev_pct: {:?}", samples.median_abs_dev_pct());
+        //println!("std_dev: {:?}", samples.std_dev(None));
+        //println!("std_dev_pct: {:?}", samples.std_dev_pct());
+        //println!("var: {:?}", samples.var(None));
+
+        let threshold = cfg.compatibility_threshold();
 
         // partition into n niches.
         // niche_runner.partition_n_sorted(cfg.num_niches(), cfg.genome_compatibility(), &mut rng);
@@ -162,8 +181,9 @@ fn main() {
 
         // If niches do not improve t=10 timesteps, redistribute them to
         // other niches.
-        let redistributes = niche_runner.redistribute_niches_with_no_improvement(0.05, 10, 
-                                                             cfg.compatibility_threshold(),
+        let redistributes = niche_runner.redistribute_niches_with_no_improvement(0.01, 10, 
+                                                             cfg.num_niches(), // XXX: rename to max_num_niches()
+                                                             threshold,
                                                              cfg.genome_compatibility(),
                                                              &mut rng);
         if redistributes > 0 {
