@@ -94,8 +94,8 @@ impl<T: Genotype + Debug> Niche<T> {
         if timesteps > self.mean_fitness_log.len() {
             None
         } else {
-            let last_fitness = self.mean_fitness_log[self.mean_fitness_log.len()-1].get();
-            let ago_fitness  = self.mean_fitness_log[self.mean_fitness_log.len()-timesteps].get();
+            let last_fitness = self.mean_fitness_log[self.mean_fitness_log.len() - 1].get();
+            let ago_fitness = self.mean_fitness_log[self.mean_fitness_log.len() - timesteps].get();
 
             let improvement = last_fitness - ago_fitness;
             Some(improvement)
@@ -200,9 +200,7 @@ pub struct Niches<T: Genotype + Debug> {
 
 impl<T: Genotype + Debug> Niches<T> {
     pub fn new() -> Self {
-        Niches {
-            niches: Vec::new(),
-        }
+        Niches { niches: Vec::new() }
     }
 
     /// Insert the individuals of `population` into the first matching niche, according to the
@@ -250,9 +248,7 @@ impl<T: Genotype + Debug> Niches<T> {
     pub fn from_single_population(pop: Population<T, Rated>) -> Self {
         let total = pop.len();
         let niche = Niche::from_population(pop);
-        Niches {
-            niches: vec![niche],
-        }
+        Niches { niches: vec![niche] }
     }
 
     /// Collapse all niches into a single `Population`.
@@ -449,8 +445,13 @@ impl SampleCompatibilityDistance {
             min: INFINITY,
             max: NEG_INFINITY,
             sum: 0.0,
-            samples: 0
+            samples: 0,
         }
+    }
+
+    pub fn mean(&self) -> f64 {
+        assert!(self.samples > 0);
+        self.sum / (self.samples as f64)
     }
 
     pub fn add_sample(&mut self, distance: f64) {
@@ -462,6 +463,17 @@ impl SampleCompatibilityDistance {
         }
         self.sum += distance;
         self.samples += 1;
+    }
+
+    pub fn add(&mut self, other: &Self) {
+        if other.min < self.min {
+            self.min = other.min;
+        }
+        if other.max > self.max {
+            self.max = other.max;
+        }
+        self.sum += other.sum;
+        self.samples += other.samples;
     }
 }
 
@@ -477,24 +489,40 @@ impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
         rng.choose(&self.individuals).unwrap()
     }
 
+    /// Returns a reference to two distinct random elements of the population.
+
+    fn two_random_distinct_individuals<R: Rng>(&self, rng: &mut R) -> Option<(&Individual<T>, &Individual<T>)> {
+        if self.len() >= 2 {
+            let a = rng.gen_range(0, self.len());
+            for _ in 0..3 {
+                let b = rng.gen_range(0, self.len());
+                if b != a {
+                    return Some((&self.individuals[a], &self.individuals[b]));
+                }
+            }
+        }
+        None
+    }
+
+
+
     /// Samples `n_samples` times the distance between two randomly choosen individuals of
     /// the population and determines the minimum, maximum and sum of the distance.
 
-    fn sample_compatibility_distance<C, R>(&self, n_samples: usize, compatibility: &C, rng: &mut R) -> SampleCompatibilityDistance
+    fn sample_compatibility_distance<C, R>(&self,
+                                           n_samples: usize,
+                                           compatibility: &C,
+                                           sample_distance: &mut SampleCompatibilityDistance,
+                                           rng: &mut R)
         where C: Distance<T>,
-              R: Rng,
+              R: Rng
     {
-        let mut sample_distance = SampleCompatibilityDistance::new();
-
         for _ in 0..n_samples {
-            // we ignore that `a` and `b` could be the same individual!
-            let a = self.random_individual(rng);
-            let b = self.random_individual(rng);
-            let distance = compatibility.distance(&a.genome, &b.genome);
-            sample_distance.add_sample(distance);
+            if let Some((a, b)) = self.two_random_distinct_individuals(rng) { 
+                let distance = compatibility.distance(&a.genome, &b.genome);
+                sample_distance.add_sample(distance);
+            }
         }
-
-        sample_distance
     }
 
     /// Partition the whole population into species (niches)
@@ -899,27 +927,28 @@ impl<'a, T, F> NicheRunner<'a, T, F>
     /// If a niche does not show a signification improvement > `improvement_threshold` within the last `timesteps`
     /// redistribute it's individuals to the remaining niches.
 
-    pub fn redistribute_niches_with_no_improvement<C,R>(&mut self,
-                                                   improvement_threshold: f64,
-                                                   timesteps: usize,
-                                                   compatibility_threshold: f64,
-                                                   compatibility: &C,
-                                                   rng: &mut R) -> usize
+    pub fn redistribute_niches_with_no_improvement<C, R>(&mut self,
+                                                         improvement_threshold: f64,
+                                                         timesteps: usize,
+                                                         compatibility_threshold: f64,
+                                                         compatibility: &C,
+                                                         rng: &mut R)
+                                                         -> usize
         where C: Distance<T>,
               R: Rng
     {
         assert!(timesteps > 0);
 
-        // record mean_fitness for all niches. 
-        
+        // record mean_fitness for all niches.
+
         {
             for niche in self.niches.niches.iter_mut() {
                 niche.log_mean_fitness();
             }
         }
-        
+
         let old_niches = mem::replace(&mut self.niches, Niches::new());
-        let mut niches_to_redistribute = Vec::new();  
+        let mut niches_to_redistribute = Vec::new();
 
         for niche in old_niches.niches.into_iter() {
             match niche.mean_fitness_improvement(timesteps) {
@@ -936,9 +965,27 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         let redistributes = niches_to_redistribute.len();
         for niche in niches_to_redistribute {
-            self.niches.insert_population_threshold(niche.population, compatibility_threshold, compatibility, rng);
+            self.niches.insert_population_threshold(niche.population,
+                                                    compatibility_threshold,
+                                                    compatibility,
+                                                    rng);
         }
         redistributes
+    }
+
+    pub fn sample_compatibility_distance<C, R>(&self,
+                                               n_samples_per_niche: usize,
+                                               compatibility: &C,
+                                               rng: &mut R)
+                                               -> SampleCompatibilityDistance
+        where C: Distance<T>,
+              R: Rng
+    {
+        let mut sample_distance = SampleCompatibilityDistance::new();
+        for niche in self.niches.niches.iter() {
+            niche.population.sample_compatibility_distance(n_samples_per_niche, compatibility, &mut sample_distance, rng);
+        }
+        sample_distance
     }
 
     /// Reproduces offspring within the niches. The niches are not destroyed.
@@ -957,8 +1004,15 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         // XXX: do in parallel
         for niche in self.niches.niches.iter_mut() {
-            let new_niche_size = niche.determine_new_niche_size(total_mean, num_niches, new_total_pop_size);
-            niche.reproduce_locally(new_niche_size, elite_percentage, selection_percentage, mate, self.fitness, rng);
+            let new_niche_size = niche.determine_new_niche_size(total_mean,
+                                                                num_niches,
+                                                                new_total_pop_size);
+            niche.reproduce_locally(new_niche_size,
+                                    elite_percentage,
+                                    selection_percentage,
+                                    mate,
+                                    self.fitness,
+                                    rng);
         }
     }
 
