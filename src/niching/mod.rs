@@ -9,6 +9,16 @@ use std::mem;
 use std::cmp;
 use prob::probabilistic_round;
 
+#[derive(Debug)]
+struct NicheReproduction {
+    old_niche_size: usize,
+    new_niche_size: f64,
+    percentage_of_population: f64,
+    offspring_size: usize,
+    select_size: usize,
+    elite_size: usize,
+}
+
 pub struct NicheRunner<'a, T, F>
     where T: Genotype + 'a,
           F: FitnessEval<T> + 'a
@@ -103,6 +113,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                                                 niche.mean_fitness().unwrap_or(Fitness::zero())
                                             })
                                             .sum();
+        println!("total_mean: {:?}", total_mean);
 
         // Calculate the new size of each niche, which depends on it's mean fitness relative to
         // other niches.
@@ -110,6 +121,8 @@ impl<'a, T, F> NicheRunner<'a, T, F>
         let new_niche_sizes: Vec<_> =
             old_niches.iter()
                       .map(|niche| {
+                          let old_niche_size = niche.len();
+
                           let percentage_of_population: f64 = if total_mean.get() == 0.0 {
                               // all individuals have a fitness of 0.0.
                               // we will equally allow each niche to procude offspring.
@@ -122,9 +135,43 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                           assert!(percentage_of_population >= 0.0 &&
                                   percentage_of_population <= 1.0);
 
-                          total_pop_size as f64 * percentage_of_population
+                          let new_niche_size = total_pop_size as f64 * percentage_of_population;
+
+                          // number of offspring to produce.
+
+                          let offspring_size = probabilistic_round(new_niche_size *
+                                                                   elite_percentage.inv().get(),
+                                                                   rng) as usize;
+
+                          // number of elitary individuals to copy from the old generation into the new.
+                          let elite_size =
+                              cmp::max(1,
+                                       probabilistic_round(new_niche_size *
+                                                           elite_percentage.get(),
+                                                           rng) as usize);
+
+
+
+                          // number of the best individuals to use for mating.
+
+                          let select_size =
+                              cmp::min(old_niche_size,
+                              probabilistic_round(old_niche_size as f64 *
+                                                  selection_percentage.get(),
+                                                  rng) as usize);
+
+                          NicheReproduction {
+                              old_niche_size: old_niche_size,
+                              new_niche_size: new_niche_size,
+                              percentage_of_population: percentage_of_population,
+                              offspring_size: offspring_size,
+                              select_size: select_size,
+                              elite_size: elite_size
+                          }
                       })
                       .collect();
+
+        println!("niche_sizes: {:?}", new_niche_sizes);
 
         let ranked_old_niches: Vec<_> = old_niches.into_iter()
                                                   .map(|niche| RankedPopulation::from_rated(niche))
@@ -132,33 +179,18 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         // Produce offspring. XXX: parallel loop (rng!)
 
-        for (niche_id, (ranked_niche, &new_niche_size)) in
-            ranked_old_niches.iter()
-                             .zip(new_niche_sizes.iter())
-                             .enumerate() {
-
-            // number of offspring to produce.
-
-            let offspring_size = probabilistic_round(new_niche_size *
-                                                     elite_percentage.inv().get(),
-                                                     rng) as usize;
+        for (niche_id, (ranked_niche, repro)) in ranked_old_niches.iter()
+                                                                  .zip(new_niche_sizes.iter())
+                                                                  .enumerate() {
 
             let mut offspring_population = UnratedPopulation::new(); // XXX: With capacity
-
-            // number of the best individuals to use for mating.
-
-            let select_size =
-                cmp::min(ranked_niche.len(),
-                         probabilistic_round(ranked_niche.len() as f64 *
-                                             selection_percentage.get(),
-                                             rng) as usize);
 
             // produce `offspring_size` individuals from the top `select_size`
             // individuals.
 
-            if select_size > 0 {
-                for _ in 0..offspring_size {
-                    let (parent1, parent2) = ranked_niche.select_parent_indices(select_size,
+            if repro.select_size > 0 {
+                for _ in 0..repro.offspring_size {
+                    let (parent1, parent2) = ranked_niche.select_parent_indices(repro.select_size,
                                                                                 3,
                                                                                 rng);
                     debug_assert!(parent1 <= parent2);
@@ -210,19 +242,11 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         // finally copy the elites into the niches.
 
-        for (niche_id, (ranked_niche, &new_niche_size)) in
-            ranked_old_niches.into_iter()
-                             .zip(new_niche_sizes.iter())
-                             .enumerate() {
+        for (niche_id, (ranked_niche, repro)) in ranked_old_niches.into_iter()
+                                                                  .zip(new_niche_sizes.iter())
+                                                                  .enumerate() {
 
-            // number of elitary individuals to copy from the old generation into the new.
-            let elite_size =
-                cmp::max(1,
-                         probabilistic_round(new_niche_size *
-                                             elite_percentage.get(),
-                                             rng) as usize);
-
-            self.niches[niche_id].append_some(ranked_niche, elite_size);
+            self.niches[niche_id].append_some(ranked_niche, repro.elite_size);
         }
     }
 
