@@ -61,41 +61,58 @@ pub struct Population<T: Genotype + Debug, R: Rating> {
 }
 
 #[derive(Debug)]
+struct NicheFitnessStat {
+    pub min_fitness: Fitness,
+    pub max_fitness: Fitness,
+    pub mean_fitness: Fitness,
+}
+
+#[derive(Debug)]
 pub struct Niche<T: Genotype + Debug> {
     population: Population<T, Rated>,
 
-    // Stores a log of mean fitness values over time. An entry is added each time
-    // `log_mean_fitness()` is called.
-    mean_fitness_log: Vec<Fitness>,
+    centroid: Option<usize>,
+
+    // Stores a log of NicheFitnessStat entries over time. An entry is added each time
+    // `log_fitness()` is called.
+    fitness_log: Vec<NicheFitnessStat>,
 }
 
 
 impl<T: Genotype + Debug> Niche<T> {
     fn from_population(pop: Population<T, Rated>) -> Self {
         assert!(pop.len() > 0);
+        let best_index = pop.best_individual_index();
         Niche {
             population: pop,
-            mean_fitness_log: Vec::new(),
+            centroid: best_index,
+            fitness_log: Vec::new(),
         }
     }
 
-    /// Logs the mean fitness
+    /// Logs the fitness statistics
 
-    fn log_mean_fitness(&mut self) {
-        let mean_fitness = self.mean_fitness();
-        self.mean_fitness_log.push(mean_fitness);
+    fn log_fitness(&mut self) {
+        let stat = NicheFitnessStat {
+            min_fitness: self.min_fitness(),
+            max_fitness: self.max_fitness(),
+            mean_fitness: self.mean_fitness()
+        };
+        self.fitness_log.push(stat);
     }
 
-    fn mean_fitness_log(&self) -> &[Fitness] {
-        &self.mean_fitness_log
+    fn fitness_log(&self) -> &[NicheFitnessStat] {
+        &self.fitness_log
     }
 
-    pub fn mean_fitness_improvement(&self, timesteps: usize) -> Option<f64> {
-        if timesteps > self.mean_fitness_log.len() {
+    pub fn fitness_improvement<F>(&self, timesteps: usize, mut select_fitness: F) -> Option<f64>
+        where F: Fn(&NicheFitnessStat) -> Fitness
+    {
+        if timesteps > self.fitness_log.len() {
             None
         } else {
-            let last_fitness = self.mean_fitness_log[self.mean_fitness_log.len() - 1].get();
-            let ago_fitness = self.mean_fitness_log[self.mean_fitness_log.len() - timesteps].get();
+            let last_fitness = select_fitness(&self.fitness_log[self.fitness_log.len() - 1]).get();
+            let ago_fitness = select_fitness(&self.fitness_log[self.fitness_log.len() - timesteps]).get();
 
             let improvement = last_fitness - ago_fitness;
             Some(improvement)
@@ -173,6 +190,22 @@ impl<T: Genotype + Debug> Niche<T> {
         self.population.mean_fitness()
     }
 
+    fn max_fitness(&self) -> Fitness {
+        self.population.max_fitness()
+    }
+
+    fn min_fitness(&self) -> Fitness {
+        self.population.min_fitness()
+    }
+
+
+
+    /// Returns a reference to the centroid element or a random element of the niche.
+
+    fn centroid_or_random_individual<R: Rng>(&self, rng: &mut R) -> &Individual<T> {
+        self.centroid.and_then(|i| self.population.individuals.get(i)).unwrap_or_else(|| self.population.random_individual(rng))
+    }
+
     /// Returns a reference to a random element of the niche.
 
     fn random_individual<R: Rng>(&self, rng: &mut R) -> &Individual<T> {
@@ -202,6 +235,32 @@ impl<T: Genotype + Debug> Niches<T> {
     pub fn new() -> Self {
         Niches { niches: Vec::new() }
     }
+
+
+    /// Returns a reference to two (distinct) niches.
+
+    fn two_random_distinct_niches<R: Rng>(&self, rng: &mut R) -> (&Niche<T>, &Niche<T>) {
+        let (a, b) = match self.niches.len() {
+            0 => panic!(),
+            1 => (0, 0),
+            2 => (0, 1),
+            len => {
+                let a = rng.gen_range(0, len);
+                let mut b = rng.gen_range(0, len);
+                for _ in 0..3 {
+                    if b != a {
+                        break;
+                    }
+                    b = rng.gen_range(0, len);
+                }
+                (a, b)
+            }
+        };
+
+        (&self.niches[a], &self.niches[b])
+    }
+
+
 
     /// Insert the individuals of `population` into the first matching niche, according to the
     /// `compatibility` and `compatibility_threshold`.
@@ -321,7 +380,7 @@ impl<T: Genotype + Debug> Niches<T> {
             // Is this genome compatible with this niche? Compare `ind` against a random individual
             // of that `niche`.
 
-            if compatibility.distance(&niche.random_individual(rng).genome, &ind.genome) <
+            if compatibility.distance(&niche.centroid_or_random_individual(rng).genome, &ind.genome) <
                compatibility_threshold {
                 return Some(niche);
             }
@@ -561,8 +620,6 @@ impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
         None
     }
 
-
-
     /// Samples `n_samples` times the distance between two randomly choosen individuals of
     /// the population and determines the minimum, maximum and sum of the distance.
 
@@ -742,6 +799,28 @@ impl<T: Genotype + Debug> Population<T, RatedSorted> {
         self.individuals.into_iter()
     }
 
+    fn min_fitness(&self) -> Fitness {
+        self.worst_individual().unwrap().fitness()
+    }
+
+    fn max_fitness(&self) -> Fitness {
+        self.best_individual().unwrap().fitness()
+    }
+
+
+    pub fn best_individual_index(&self) -> Option<usize> {
+        if self.individuals.len() > 0 {
+            Some(0)
+        } else {
+            None
+        }
+    }
+
+    pub fn worst_individual(&self) -> Option<&Individual<T>> {
+        self.individuals.last()
+    }
+
+
     pub fn best_individual(&self) -> Option<&Individual<T>> {
         self.individuals.first()
     }
@@ -813,9 +892,26 @@ impl<T: Genotype + Debug> Population<T, Rated> {
         }
     }
 
+    fn min_fitness(&self) -> Fitness {
+        self.worst_individual().unwrap().fitness()
+    }
+
+    fn max_fitness(&self) -> Fitness {
+        self.best_individual().unwrap().fitness()
+    }
+
+    pub fn best_individual_index(&self) -> Option<usize> {
+        (0..self.individuals.len()).into_iter().max_by_key(|&i| self.individuals[i].fitness())
+    }
+
     pub fn best_individual(&self) -> Option<&Individual<T>> {
         self.individuals.iter().max_by_key(|ind| ind.fitness())
     }
+
+    pub fn worst_individual(&self) -> Option<&Individual<T>> {
+        self.individuals.iter().min_by_key(|ind| ind.fitness())
+    }
+
 
     /// Merge `self` with the first `n` individuals from population `other`.
     pub fn merge(&mut self, other: Population<T, RatedSorted>, n: usize) {
@@ -1006,7 +1102,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         {
             for niche in self.niches.niches.iter_mut() {
-                niche.log_mean_fitness();
+                niche.log_fitness();
             }
         }
 
@@ -1014,7 +1110,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
         let mut niches_to_redistribute = Vec::new();
 
         for niche in old_niches.niches.into_iter() {
-            match niche.mean_fitness_improvement(timesteps) {
+            match niche.fitness_improvement(timesteps, |f| f.max_fitness) {
                 Some(niche_improvement) if niche_improvement < improvement_threshold => {
                     // this niche did not improve good enough
                     niches_to_redistribute.push(niche);
@@ -1050,6 +1146,25 @@ impl<'a, T, F> NicheRunner<'a, T, F>
             niche.population.sample_compatibility_distance(n_samples_per_niche, compatibility, &mut sample_distance, rng);
         }
         sample_distance
+    }
+
+    pub fn inter_niche_compatibility_distance<C, R>(&self,
+                                               samples: usize,
+                                               compatibility: &C,
+                                               rng: &mut R)
+                                               -> Vec<f64>
+        where C: Distance<T>,
+              R: Rng
+    {
+        assert!(self.niches.num_niches() > 0);
+
+        (0..samples).map(|_| {
+            let (niche_a, niche_b) = self.niches.two_random_distinct_niches(rng);
+            let a = niche_a.random_individual(rng);
+            let b = niche_b.random_individual(rng);
+
+            compatibility.distance(&a.genome, &b.genome)
+        }).collect()
     }
 
     /// Reproduces offspring within the niches. The niches are not destroyed.
