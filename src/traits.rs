@@ -1,5 +1,6 @@
 use rand::Rng;
 use fitness::Fitness;
+use std::fmt::Debug;
 
 /// Measures the genetic distance. This can be applied on a variety of levels.
 /// For example, this is used to measure the genetic distance (or compatibility)
@@ -10,7 +11,7 @@ pub trait Distance<T> {
     fn distance(&self, left: &T, right: &T) -> f64;
 }
 
-pub trait Genotype: Send + Clone {}
+pub trait Genotype: Send + Clone + Debug {}
 
 /// Mates two individuals, producing one offspring.
 /// There is no need to use both individuals. Instead it can also
