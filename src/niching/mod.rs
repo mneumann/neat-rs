@@ -121,9 +121,9 @@ impl<'a, T, F> NicheRunner<'a, T, F>
         old_niches_sort.sort_by(|a, b| a.0.cmp(&b.0).reverse());
 
         let total_mean: Fitness = old_niches_sort.iter()
-                                            .take(top_n_niches)
-                                            .map(|&(mean_fitness, _)| mean_fitness)
-                                            .sum();
+                                                 .take(top_n_niches)
+                                                 .map(|&(mean_fitness, _)| mean_fitness)
+                                                 .sum();
         println!("total_mean: {:?}", total_mean);
 
         let old_niches: Vec<_> = old_niches_sort.into_iter().map(|(_, niche)| niche).collect();
@@ -161,7 +161,6 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                                                                                 probabilistic_round(new_niche_size *
                                                                                                     elite_percentage.get(),
                                                                                                     rng) as usize);
-
 
 
                                                                    // number of the best individuals to use for mating.
@@ -228,6 +227,23 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
             for ind in rated_offspring_population.move_individuals().into_iter() {
 
+                // sort `ind` into the niche that is closest.
+
+                let distances: Vec<_> = ranked_old_niches.iter().enumerate().map(|(probe_niche_id, probe_niche)| {
+                    let mut distance_sum = 0.0;
+                    for _ in 0..10 {
+                        if let Some(probe_ind) = probe_niche.random_individual(rng) {
+                            distance_sum += compatibility.distance(&probe_ind.genome(), &ind.genome());
+                        }
+                    }
+                    (probe_niche_id, Fitness::new(distance_sum))
+                }).collect();
+
+
+                let selected_niche = distances.iter().min_by_key(|a| a.1).unwrap().0;
+
+                /*
+                 
                 // in case we do not find a niche, use the originating niche
 
                 let mut selected_niche = niche_id;
@@ -251,6 +267,8 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                     }
                 }
 
+                */
+
 
                 // place it into `selected_niche`
 
@@ -261,12 +279,13 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         // finally copy the elites into the niches.
 
-        for (niche_id, (ranked_niche, repro)) in ranked_old_niches.into_iter()
-                                                                  .zip(new_niche_sizes.iter())
+        //for (niche_id, (ranked_niche, repro)) in ranked_old_niches.into_iter()
+        for (niche_id, ranked_niche) in ranked_old_niches.into_iter()
+                                                                  //.zip(new_niche_sizes.iter())
                                                                   .enumerate() {
 
             if niche_id < top_n_niches {
-                self.niches[niche_id].append_some(ranked_niche, repro.elite_size);
+                self.niches[niche_id].append_some(ranked_niche, new_niche_sizes[niche_id].elite_size);
             } else {
                 // copy the niche
                 self.niches[niche_id].append_all(ranked_niche);
