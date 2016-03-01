@@ -205,16 +205,20 @@ impl<T: Genotype + Debug> Niches<T> {
 
     /// Insert the individuals of `population` into the first matching niche, according to the
     /// `compatibility` and `compatibility_threshold`.
+    ///
+    /// This will not create a new niche if `max_num_niches` is reached.
 
     pub fn insert_population_threshold<C, R, RA>(&mut self,
                                                  population: Population<T, RA>,
                                                  compatibility_threshold: f64,
                                                  compatibility: &C,
+                                                 max_num_niches: usize,
                                                  rng: &mut R)
         where C: Distance<T>,
               R: Rng,
               RA: IsRated
     {
+        assert!(max_num_niches > 0);
         for ind in population.individuals.into_iter() {
             if let Some(niche) = self.find_first_matching_niche(&ind,
                                                                 compatibility_threshold,
@@ -224,8 +228,14 @@ impl<T: Genotype + Debug> Niches<T> {
                 continue;
             }
 
-            // if no compatible niche was found, create a new niche containing this individual.
-            self.add_niche(Niche::from_individual(ind));
+            if self.num_niches() < max_num_niches {
+                // if no compatible niche was found, create a new niche containing this individual.
+                self.add_niche(Niche::from_individual(ind));
+            } else {
+                // the maximum number of niches has been reached. insert into the best matching
+                // niche.
+                self.find_best_matching_niche(&ind, compatibility, rng).unwrap().add_individual(ind);
+            }
         }
     }
 
@@ -318,6 +328,42 @@ impl<T: Genotype + Debug> Niches<T> {
         }
         return None;
     }
+
+    pub fn find_best_matching_niche<'a, R, C>(&'a mut self,
+                                               ind: &Individual<T>,
+                                               compatibility: &C,
+                                               rng: &mut R)
+                                               -> Option<&'a mut Niche<T>>
+        where R: Rng,
+              C: Distance<T>
+    {
+        assert!(self.niches.len() > 0);
+
+        let mut best_niche = None;
+
+        for (i, niche) in self.niches.iter().enumerate() {
+            let dist = compatibility.distance(&niche.random_individual(rng).genome, &ind.genome);
+
+            best_niche = match best_niche {
+                None => {
+                    Some((i, dist))
+                }
+                Some((_j, best_dist)) if dist < best_dist => {
+                   Some((i, dist))
+                }
+                Some((j, best_dist)) => {
+                    Some((j, best_dist))
+                }
+            };
+        }
+
+        if let Some((i, _)) = best_niche {
+            Some(&mut self.niches[i])
+        } else {
+            None
+        }
+    }
+
 
     /// Reproduce individuals of all niches. Each niche is allowed to reproduce a number of
     /// individuals relative to it's performance to other niches.
@@ -449,9 +495,20 @@ impl SampleCompatibilityDistance {
         }
     }
 
-    pub fn mean(&self) -> f64 {
-        assert!(self.samples > 0);
-        self.sum / (self.samples as f64)
+    pub fn span(&self) -> Option<f64> {
+        if self.samples > 0 {
+            Some(self.max - self.min)
+        } else {
+            None
+        }
+    }
+
+    pub fn mean(&self) -> Option<f64> {
+        if self.samples > 0 {
+            Some(self.sum / (self.samples as f64))
+        } else {
+            None
+        }
     }
 
     pub fn add_sample(&mut self, distance: f64) {
@@ -530,13 +587,14 @@ impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
     pub fn partition<C, R>(self,
                            compatibility_threshold: f64,
                            compatibility: &C,
+                           max_num_niches: usize,
                            rng: &mut R)
                            -> Niches<T>
         where C: Distance<T>,
               R: Rng
     {
         let mut niches = Niches::new();
-        niches.insert_population_threshold(self, compatibility_threshold, compatibility, rng);
+        niches.insert_population_threshold(self, compatibility_threshold, compatibility, max_num_niches, rng);
         niches
     }
 
@@ -908,12 +966,13 @@ impl<'a, T, F> NicheRunner<'a, T, F>
     pub fn partition_threshold<C, R>(&mut self,
                                      compatibility_threshold: f64,
                                      compatibility: &C,
+                                     max_num_niches: usize,
                                      rng: &mut R)
         where C: Distance<T>,
               R: Rng
     {
         let niches = mem::replace(&mut self.niches, Niches::new());
-        self.niches = niches.collapse().partition(compatibility_threshold, compatibility, rng);
+        self.niches = niches.collapse().partition(compatibility_threshold, compatibility, max_num_niches, rng);
     }
 
     pub fn partition_n_sorted<C, R>(&mut self, n: usize, compatibility: &C, rng: &mut R)
@@ -926,10 +985,13 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
     /// If a niche does not show a signification improvement > `improvement_threshold` within the last `timesteps`
     /// redistribute it's individuals to the remaining niches.
+    ///
+    /// TODO: Niches which do not have a minimum number of elements will be destroyed. 
 
     pub fn redistribute_niches_with_no_improvement<C, R>(&mut self,
                                                          improvement_threshold: f64,
                                                          timesteps: usize,
+                                                         max_num_niches: usize,
                                                          compatibility_threshold: f64,
                                                          compatibility: &C,
                                                          rng: &mut R)
@@ -938,6 +1000,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
               R: Rng
     {
         assert!(timesteps > 0);
+        assert!(max_num_niches > 0);
 
         // record mean_fitness for all niches.
 
@@ -968,6 +1031,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
             self.niches.insert_population_threshold(niche.population,
                                                     compatibility_threshold,
                                                     compatibility,
+                                                    max_num_niches,
                                                     rng);
         }
         redistributes
