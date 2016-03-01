@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 use std::fmt::Debug;
 use std::cmp;
 use std::mem;
+use std::f64::{INFINITY, NEG_INFINITY};
 use rayon::par_iter::*;
 
 #[derive(Debug)]
@@ -175,7 +176,7 @@ impl<T: Genotype + Debug> Niche<T> {
     /// Returns a reference to a random element of the niche.
 
     fn random_individual<R: Rng>(&self, rng: &mut R) -> &Individual<T> {
-        rng.choose(&self.population.individuals).unwrap()
+        self.population.random_individual(rng)
     }
 
     fn add_individual(&mut self, ind: Individual<T>) {
@@ -434,10 +435,66 @@ impl<T: Genotype + Debug> Into<Population<T, Rated>> for Population<T, RatedSort
     }
 }
 
+#[derive(Debug)]
+pub struct SampleCompatibilityDistance {
+    pub min: f64,
+    pub max: f64,
+    pub sum: f64,
+    pub samples: usize,
+}
+
+impl SampleCompatibilityDistance {
+    pub fn new() -> Self {
+        SampleCompatibilityDistance {
+            min: INFINITY,
+            max: NEG_INFINITY,
+            sum: 0.0,
+            samples: 0
+        }
+    }
+
+    pub fn add_sample(&mut self, distance: f64) {
+        if distance < self.min {
+            self.min = distance;
+        }
+        if distance > self.max {
+            self.max = distance;
+        }
+        self.sum += distance;
+        self.samples += 1;
+    }
+}
+
 impl<T: Genotype + Debug, RA: IsRated> Population<T, RA> {
     fn mean_fitness(&self) -> Fitness {
         let sum: Fitness = self.individuals.iter().map(|ind| ind.fitness()).sum();
         sum / Fitness::new(self.len() as f64)
+    }
+
+    /// Returns a reference to a random element of the population.
+
+    fn random_individual<R: Rng>(&self, rng: &mut R) -> &Individual<T> {
+        rng.choose(&self.individuals).unwrap()
+    }
+
+    /// Samples `n_samples` times the distance between two randomly choosen individuals of
+    /// the population and determines the minimum, maximum and sum of the distance.
+
+    fn sample_compatibility_distance<C, R>(&self, n_samples: usize, compatibility: &C, rng: &mut R) -> SampleCompatibilityDistance
+        where C: Distance<T>,
+              R: Rng,
+    {
+        let mut sample_distance = SampleCompatibilityDistance::new();
+
+        for _ in 0..n_samples {
+            // we ignore that `a` and `b` could be the same individual!
+            let a = self.random_individual(rng);
+            let b = self.random_individual(rng);
+            let distance = compatibility.distance(&a.genome, &b.genome);
+            sample_distance.add_sample(distance);
+        }
+
+        sample_distance
     }
 
     /// Partition the whole population into species (niches)
