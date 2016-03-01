@@ -26,6 +26,12 @@ impl<T> Population for UnratedPopulation<T>
 impl<T> UnratedPopulation<T>
     where T: Genotype
 {
+    pub fn new() -> Self {
+        UnratedPopulation {
+            unrated_individuals: Vec::new(),
+        }
+    }
+
     pub fn add_unrated_individual(&mut self, ind: Individual<T>) {
         assert!(!ind.has_fitness());
         self.unrated_individuals.push(ind);

@@ -14,7 +14,9 @@ mod common;
 mod config;
 
 //use criterion_stats::univariate::Sample;
-use neat::population::{Population, Unrated, NicheRunner};
+use neat::population::{UnratedPopulation, Individual, Population, PopulationWithRank};
+use neat::niching::NicheRunner;
+
 use neat::traits::{FitnessEval};
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
 use neat::fitness::Fitness;
@@ -122,22 +124,23 @@ fn main() {
 
     let mut niche_runner = NicheRunner::new(&fitness_evaluator);
 
-    let niche_size = cfg.population_size() / cfg.num_niches(); 
-
     for _ in 0..cfg.num_niches() {
-        let mut initial_pop = Population::<_, Unrated>::new();
+        let mut pop = UnratedPopulation::new();
+
+        // XXX: probabilistic round
+        let niche_size = cfg.population_size() / cfg.num_niches(); 
 
         for _ in 0..niche_size {
-            initial_pop.add_genome(Box::new(template_genome.clone()));
+            pop.add_unrated_individual(Individual::new_unrated(Box::new(template_genome.clone())));
         }
 
-        niche_runner.add_unrated_population_as_niche(initial_pop);
+        niche_runner.add_unrated_population_as_niche(pop);
     }
 
     while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
         println!("iteration: {}", niche_runner.current_iteration());
 
-        let best_fitness = niche_runner.best_individual().fitness().get();;
+        let best_fitness = niche_runner.best_individual().unwrap().fitness().get();;
         println!("best fitness: {:2}", best_fitness); 
         println!("num individuals: {}", niche_runner.num_individuals());
 
@@ -146,52 +149,16 @@ fn main() {
             break;
         }
 
-        //let samples = niche_runner.inter_niche_compatibility_distance(100, cfg.genome_compatibility(), &mut rng);
-        //println!("samples: {:?}", samples);
-
-
-        //let samples = Sample::new(&samples);
-        //println!("mean: {:?}", samples.mean());
-        //println!("median_abs_dev: {:?}", samples.median_abs_dev(None));
-        //println!("median_abs_dev_pct: {:?}", samples.median_abs_dev_pct());
-        //println!("std_dev: {:?}", samples.std_dev(None));
-        //println!("std_dev_pct: {:?}", samples.std_dev_pct());
-        //println!("var: {:?}", samples.var(None));
-
-        let threshold = cfg.compatibility_threshold();
-
-        // partition into n niches.
-        // niche_runner.partition_n_sorted(cfg.num_niches(), cfg.genome_compatibility(), &mut rng);
-        // println!("partitioned into num niches: {}", niche_runner.num_niches());
-        /*
-        niche_runner.reproduce_global(cfg.population_size(),
-                                      cfg.elite_percentage(),
-                                      cfg.selection_percentage(),
-                                      &mut mater,
-                                      &mut rng);
-                                      */
-
-        println!("num niches: {}", niche_runner.num_niches());
-
-        niche_runner.reproduce_niche_locally(cfg.population_size(),
-                                      cfg.elite_percentage(),
-                                      cfg.selection_percentage(),
-                                      &mut mater,
-                                      &mut rng);
-
-        // If niches do not improve t=10 timesteps, redistribute them to
-        // other niches.
-        let redistributes = niche_runner.redistribute_niches_with_no_improvement(0.01, 10, 
-                                                             cfg.num_niches(), // XXX: rename to max_num_niches()
-                                                             threshold,
-                                                             cfg.genome_compatibility(),
-                                                             &mut rng);
-        if redistributes > 0 {
-            println!("{} niches redistributed", redistributes);
-        }
+        niche_runner.reproduce(cfg.population_size(),
+                               cfg.elite_percentage(),
+                               cfg.selection_percentage(),
+                               cfg.compatibility_threshold(),
+                               cfg.genome_compatibility(),
+                               &mut mater,
+                               &mut rng);
     }
 
-    let final_pop = niche_runner.into_population().sort();
+    let final_pop = niche_runner.into_ranked_population();
 
     {
         let best = final_pop.best_individual().unwrap();
@@ -199,7 +166,7 @@ fn main() {
         write_gml("best.gml", &genome_to_graph(best.genome()));
     }
 
-    for (i, ind) in final_pop.into_iter().enumerate() {
+    for (i, ind) in final_pop.individuals().iter().enumerate() {
         //println!("individual #{}: {:.3}", i, ind.fitness().get());
         write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &genome_to_graph(ind.genome()));
     }

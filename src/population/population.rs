@@ -2,6 +2,7 @@ use traits::Genotype;
 use population::individual::Individual;
 use rand::Rng;
 use std::cmp;
+use fitness::Fitness;
 
 pub trait Population {
     type Genome: Genotype;
@@ -50,6 +51,16 @@ pub trait PopulationWithRating: Population {
     fn worst_individual(&self) -> Option<&Individual<Self::Genome>> {
         self.individuals().iter().min_by_key(|ind| ind.fitness())
     }
+
+    fn mean_fitness(&self) -> Option<Fitness> {
+        match self.len() {
+            0 => None,
+            len => {
+                let sum: Fitness = self.individuals().iter().map(|ind| ind.fitness()).sum();
+                Some(sum / Fitness::new(len as f64))
+            }
+        }
+    }
 }
 
 /// A ranked population is sorted (from better to worse) according to the individuals fitness values.
@@ -75,6 +86,7 @@ pub trait PopulationWithRank : PopulationWithRating {
                                 -> (usize, usize)
         where R: Rng
     {
+        assert!(self.len() > 0);
         let select_size = cmp::min(self.len(), select_size);
         assert!(select_size > 0);
 

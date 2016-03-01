@@ -1,4 +1,4 @@
-#![feature(zero_one)]
+#![feature(iter_arith, zero_one)]
 
 extern crate rand;
 extern crate rayon;
@@ -15,6 +15,7 @@ pub mod alignment_metric;
 pub mod mutate;
 pub mod fitness;
 pub mod population;
+pub mod niching;
 pub mod prob;
 pub mod crossover;
 pub mod genomes;

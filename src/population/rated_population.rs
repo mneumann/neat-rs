@@ -30,6 +30,10 @@ impl<T> PopulationWithRating for RatedPopulation<T> where T: Genotype {}
 impl<T> RatedPopulation<T>
     where T: Genotype
 {
+    pub fn new() -> Self {
+        RatedPopulation { rated_individuals: Vec::new() }
+    }
+
     pub fn from_unrated_seq<F>(unrated_pop: UnratedPopulation<T>, f: &F) -> Self
         where F: FitnessEval<T>
     {
@@ -63,7 +67,14 @@ impl<T> RatedPopulation<T>
 
     /// Append all individuals of population `other`.
 
-    pub fn append(&mut self, other: RatedPopulation<T>) {
-        self.rated_individuals.extend(other.rated_individuals.into_iter());
+    pub fn append_all<R>(&mut self, other: R) where R: PopulationWithRating<Genome=T> {
+        self.rated_individuals.extend(other.move_individuals().into_iter());
     }
+
+    /// Append the first `take_n` individuals of population `other`.
+
+    pub fn append_some<R>(&mut self, other: R, take_n: usize) where R: PopulationWithRating<Genome=T> {
+        self.rated_individuals.extend(other.move_individuals().into_iter().take(take_n));
+    }
+
 }
