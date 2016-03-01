@@ -218,8 +218,12 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
                 let mut selected_niche = niche_id;
 
-                'find_niche: for (probe_niche_id, probe_niche) in ranked_old_niches.iter()
-                                                                                   .enumerate() {
+                // Sample `2 * number of niches` times a randomly choosen niche.
+
+                'select_niche: for _ in 0..(2*ranked_old_niches.len()) {
+                    let probe_niche_id = rng.gen_range(0, ranked_old_niches.len());
+
+                    let probe_niche = &ranked_old_niches[probe_niche_id]; 
 
                     // Is this genome compatible with this niche? Compare `ind` against a random individual
                     // of that `niche`.
@@ -228,10 +232,11 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                         if compatibility.distance(&probe_ind.genome(), &ind.genome()) <
                            compatibility_threshold {
                             selected_niche = probe_niche_id;
-                            break 'find_niche;
+                            break 'select_niche;
                         }
                     }
                 }
+
 
                 // place it into `selected_niche`
 
