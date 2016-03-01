@@ -85,6 +85,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
     pub fn reproduce<C, M, R>(&mut self,
                               total_pop_size: usize,
+                              top_n_niches: usize,
                               elite_percentage: Closed01<f64>,
                               selection_percentage: Closed01<f64>,
                               compatibility_threshold: f64,
@@ -99,6 +100,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         let num_niches = self.niches.len();
         assert!(num_niches > 0);
+        assert!(top_n_niches <= num_niches);
         let old_niches = {
             let new_niches = self.niches.iter().map(|_| RatedPopulation::new()).collect();
             mem::replace(&mut self.niches, new_niches)
@@ -107,72 +109,83 @@ impl<'a, T, F> NicheRunner<'a, T, F>
         assert!(old_niches.len() == num_niches);
         assert!(self.niches.len() == num_niches);
 
+        // sort by mean fitness. XXX: use best fitness?
+        let mut old_niches_sort: Vec<_> = old_niches.into_iter()
+                                                    .map(|niche| {
+                                                        (niche.mean_fitness()
+                                                              .unwrap_or(Fitness::zero()),
+                                                         niche)
+                                                    })
+                                                    .collect();
 
-        let total_mean: Fitness = old_niches.iter()
-                                            .map(|niche| {
-                                                niche.mean_fitness().unwrap_or(Fitness::zero())
-                                            })
+        old_niches_sort.sort_by(|a, b| a.0.cmp(&b.0).reverse());
+
+        let total_mean: Fitness = old_niches_sort.iter()
+                                            .take(top_n_niches)
+                                            .map(|&(mean_fitness, _)| mean_fitness)
                                             .sum();
         println!("total_mean: {:?}", total_mean);
+
+        let old_niches: Vec<_> = old_niches_sort.into_iter().map(|(_, niche)| niche).collect();
 
         // Calculate the new size of each niche, which depends on it's mean fitness relative to
         // other niches.
 
-        let new_niche_sizes: Vec<_> =
-            old_niches.iter()
-                      .map(|niche| {
-                          let old_niche_size = niche.len();
+        let new_niche_sizes: Vec<_> = old_niches.iter().take(top_n_niches)
+                                                               .map(|niche| {
+                                                                   let old_niche_size = niche.len();
 
-                          let percentage_of_population: f64 = if total_mean.get() == 0.0 {
-                              // all individuals have a fitness of 0.0.
-                              // we will equally allow each niche to procude offspring.
-                              1.0 / (num_niches as f64)
-                          } else {
-                              (niche.mean_fitness().unwrap_or(Fitness::zero()) / total_mean).get()
-                          };
+                                                                   let percentage_of_population: f64 = if total_mean.get() == 0.0 {
+                                                                       // all individuals have a fitness of 0.0.
+                                                                       // we will equally allow each niche to procude offspring.
+                                                                       1.0 / (top_n_niches as f64)
+                                                                   } else {
+                                                                       (niche.mean_fitness().unwrap_or(Fitness::zero()) / total_mean).get()
+                                                                   };
 
-                          // calculate new size of niche
-                          assert!(percentage_of_population >= 0.0 &&
-                                  percentage_of_population <= 1.0);
+                                                                   // calculate new size of niche
+                                                                   assert!(percentage_of_population >= 0.0 &&
+                                                                           percentage_of_population <= 1.0);
 
-                          let new_niche_size = total_pop_size as f64 * percentage_of_population;
+                                                                   let new_niche_size = total_pop_size as f64 * percentage_of_population;
 
-                          // number of offspring to produce.
+                                                                   // number of offspring to produce.
 
-                          let offspring_size = probabilistic_round(new_niche_size *
-                                                                   elite_percentage.inv().get(),
-                                                                   rng) as usize;
+                                                                   let offspring_size = probabilistic_round(new_niche_size *
+                                                                                                            elite_percentage.inv().get(),
+                                                                                                            rng) as usize;
 
-                          // number of elitary individuals to copy from the old generation into the new.
-                          let elite_size =
-                              cmp::max(1,
-                                       probabilistic_round(new_niche_size *
-                                                           elite_percentage.get(),
-                                                           rng) as usize);
-
+                                                                   // number of elitary individuals to copy from the old generation into the new.
+                                                                   let elite_size =
+                                                                       cmp::max(1,
+                                                                                probabilistic_round(new_niche_size *
+                                                                                                    elite_percentage.get(),
+                                                                                                    rng) as usize);
 
 
-                          // number of the best individuals to use for mating.
 
-                          let select_size =
-                              cmp::min(old_niche_size,
-                              probabilistic_round(old_niche_size as f64 *
-                                                  selection_percentage.get(),
-                                                  rng) as usize);
+                                                                   // number of the best individuals to use for mating.
 
-                          NicheReproduction {
-                              old_niche_size: old_niche_size,
-                              new_niche_size: new_niche_size,
-                              percentage_of_population: percentage_of_population,
-                              offspring_size: offspring_size,
-                              select_size: select_size,
-                              elite_size: elite_size
-                          }
-                      })
-                      .collect();
+                                                                   let select_size =
+                                                                       cmp::min(old_niche_size,
+                                                                                probabilistic_round(old_niche_size as f64 *
+                                                                                                    selection_percentage.get(),
+                                                                                                    rng) as usize);
+
+                                                                   NicheReproduction {
+                                                                       old_niche_size: old_niche_size,
+                                                                       new_niche_size: new_niche_size,
+                                                                       percentage_of_population: percentage_of_population,
+                                                                       offspring_size: offspring_size,
+                                                                       select_size: select_size,
+                                                                       elite_size: elite_size
+                                                                   }
+                                                               })
+                  .collect();
 
         println!("niche_sizes: {:?}", new_niche_sizes);
 
+        // XXX: we don't have to sort all niches! only `top_n_niches`
         let ranked_old_niches: Vec<_> = old_niches.into_iter()
                                                   .map(|niche| RankedPopulation::from_rated(niche))
                                                   .collect();
@@ -180,6 +193,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
         // Produce offspring. XXX: parallel loop (rng!)
 
         for (niche_id, (ranked_niche, repro)) in ranked_old_niches.iter()
+                                                                  .take(top_n_niches)
                                                                   .zip(new_niche_sizes.iter())
                                                                   .enumerate() {
 
@@ -220,10 +234,10 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
                 // Sample `2 * number of niches` times a randomly choosen niche.
 
-                'select_niche: for _ in 0..(2*ranked_old_niches.len()) {
+                'select_niche: for _ in 0..(2 * ranked_old_niches.len()) {
                     let probe_niche_id = rng.gen_range(0, ranked_old_niches.len());
 
-                    let probe_niche = &ranked_old_niches[probe_niche_id]; 
+                    let probe_niche = &ranked_old_niches[probe_niche_id];
 
                     // Is this genome compatible with this niche? Compare `ind` against a random individual
                     // of that `niche`.
@@ -251,7 +265,12 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                                                                   .zip(new_niche_sizes.iter())
                                                                   .enumerate() {
 
-            self.niches[niche_id].append_some(ranked_niche, repro.elite_size);
+            if niche_id < top_n_niches {
+                self.niches[niche_id].append_some(ranked_niche, repro.elite_size);
+            } else {
+                // copy the niche
+                self.niches[niche_id].append_all(ranked_niche);
+            }
         }
     }
 

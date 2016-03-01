@@ -137,6 +137,8 @@ fn main() {
         niche_runner.add_unrated_population_as_niche(pop);
     }
 
+    let mut fitness_log: Vec<f64> = Vec::new();
+
     while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
         println!("iteration: {}", niche_runner.current_iteration());
 
@@ -149,7 +151,20 @@ fn main() {
             break;
         }
 
+        fitness_log.push(best_fitness);
+
+        let mut top_n_niches = cfg.num_niches();
+
+        if fitness_log.len() >= 10 {
+            let previous_fitness = fitness_log[fitness_log.len() - 10];
+            if best_fitness - previous_fitness < 0.01 {
+                // no change within 10 timesteps
+                top_n_niches = 2;
+            }
+        }
+
         niche_runner.reproduce(cfg.population_size(),
+                               top_n_niches,
                                cfg.elite_percentage(),
                                cfg.selection_percentage(),
                                cfg.compatibility_threshold(),
