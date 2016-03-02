@@ -13,7 +13,8 @@ extern crate env_logger;
 mod common;
 mod config;
 
-use neat::population::{Population, Unrated, NicheRunner};
+use neat::population::{UnratedPopulation, Individual, Population, PopulationWithRank};
+use neat::niching::NicheRunner;
 use neat::traits::FitnessEval;
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater,
                                      ElementStrategy};
@@ -156,6 +157,11 @@ fn main() {
             genome.add_node(cache.create_node_innovation(), CppnNode::Input);
         }
 
+        // 3 inputs for distance (source to origin, target to origin, source to target)
+        for _ in 0..3 {
+            genome.add_node(cache.create_node_innovation(), CppnNode::Input);
+        }
+
         // 1 output (y)
         genome.add_node(cache.create_node_innovation(), CppnNode::Output);
 
@@ -165,12 +171,20 @@ fn main() {
         genome
     };
 
-    let mut initial_pop = Population::<_, Unrated>::new();
+    let mut niche_runner = NicheRunner::new(&fitness_evaluator);
 
-    for _ in 0..cfg.population_size() {
-        initial_pop.add_genome(Box::new(template_genome.clone()));
+    for _ in 0..cfg.num_niches() {
+        let mut pop = UnratedPopulation::new();
+
+        // XXX: probabilistic round
+        let niche_size = cfg.population_size() / cfg.num_niches(); 
+
+        for _ in 0..niche_size {
+            pop.add_unrated_individual(Individual::new_unrated(Box::new(template_genome.clone())));
+        }
+
+        niche_runner.add_unrated_population_as_niche(pop);
     }
-    assert!(initial_pop.len() == cfg.population_size());
 
     let mut mater = Mater {
         p_crossover: cfg.p_crossover(),
@@ -183,14 +197,12 @@ fn main() {
         _n: PhantomData,
     };
 
-    let mut niche_runner = NicheRunner::new(&fitness_evaluator);
-
-    niche_runner.add_unrated_population_as_niche(initial_pop);
+    let mut fitness_log: Vec<f64> = Vec::new();
 
     while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
         println!("iteration: {}", niche_runner.current_iteration());
 
-        let best_fitness = niche_runner.best_individual().fitness().get();;
+        let best_fitness = niche_runner.best_individual().unwrap().fitness().get();;
         println!("best fitness: {:2}", best_fitness); 
         println!("num individuals: {}", niche_runner.num_individuals());
 
@@ -199,26 +211,26 @@ fn main() {
             break;
         }
 
-        // partition into n niches.
-        niche_runner.partition_n_sorted(cfg.num_niches(), cfg.genome_compatibility(), &mut rng);
-        //niche_runner.partition_threshold(cfg.compatibility_threshold(), cfg.genome_compatibility(), &mut rng);
-        println!("partitioned into num niches: {}", niche_runner.num_niches());
+        let mut top_n_niches = cfg.num_niches();
 
-        niche_runner.reproduce_global(cfg.population_size(),
-                                      cfg.elite_percentage(),
-                                      cfg.selection_percentage(),
-                                      &mut mater,
-                                      &mut rng);
+        niche_runner.reproduce(cfg.population_size(),
+                               top_n_niches,
+                               cfg.elite_percentage(),
+                               cfg.selection_percentage(),
+                               cfg.compatibility_threshold(),
+                               cfg.genome_compatibility(),
+                               &mut mater,
+                               &mut rng);
     }
 
-    let final_pop = niche_runner.into_population().sort();
+    let final_pop = niche_runner.into_ranked_population();
 
     {
         let best = final_pop.best_individual().unwrap();
         write_gml("best.gml", &fitness_evaluator.genome_to_graph(best.genome()));
     }
 
-    for (i, ind) in final_pop.into_iter().enumerate() {
+    for (i, ind) in final_pop.individuals().iter().enumerate() {
         println!("individual #{}: {:.3}", i, ind.fitness().get());
         write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &fitness_evaluator.genome_to_graph(ind.genome()));
     }

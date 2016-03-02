@@ -8,7 +8,7 @@ extern crate asexp;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
-extern crate criterion_stats;
+//extern crate criterion_stats;
 
 mod common;
 mod config;
