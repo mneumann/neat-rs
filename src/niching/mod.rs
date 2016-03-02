@@ -126,7 +126,6 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                                                  .sum();
         println!("total_mean: {:?}", total_mean);
 
-
         // Calculate the new size of each niche, which depends on it's mean fitness relative to
         // other niches.
 
@@ -192,6 +191,8 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         // Produce offspring. XXX: parallel loop (rng!)
 
+        let mut offspring_population = UnratedPopulation::new(); // XXX: With capacity
+
         for (niche_id, (ranked_niche, repro)) in ranked_old_niches.iter()
                                                                   .zip(new_niche_sizes.iter())
                                                                   .enumerate() {
@@ -199,8 +200,6 @@ impl<'a, T, F> NicheRunner<'a, T, F>
             if repro.select_size <= 0 || repro.offspring_size <= 0 {
                 continue;
             }
-
-            let mut offspring_population = UnratedPopulation::new(); // XXX: With capacity
 
             // produce `offspring_size` individuals from the top `select_size`
             // individuals.
@@ -218,51 +217,67 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
                 offspring_population.add_unrated_individual(Individual::new_unrated(Box::new(offspring)));
             }
-
-            // now rate the offspring population
-
-            let rated_offspring_population =
-                RatedPopulation::from_unrated_par(offspring_population, self.fitness_eval);
-
-            // and place it's individuals into the new niches. use random sampling within the old niches to
-            // determine into which niche to place an individual.
-
-            for ind in rated_offspring_population.move_individuals().into_iter() {
-
-                // sort `ind` into the niche that is closest.
-
-                let distances: Vec<_> = ranked_old_niches.iter()
-                                                         .enumerate()
-                                                         .map(|(probe_niche_id, probe_niche)| {
-                                                             let mut distance_sum = 0.0;
-                                                             for _ in 0..10 {
-                                                                 if let Some(probe_ind) =
-                                                    probe_niche.random_individual(rng) {
-                                                 distance_sum +=
-                                                     compatibility.distance(&probe_ind.genome(),
-                                                                            &ind.genome());
-                                             }
-                                                             }
-                                                             (probe_niche_id,
-                                                              Fitness::new(distance_sum))
-                                                         })
-                                                         .collect();
-
-
-                let selected_niche = distances.iter().min_by_key(|a| a.1).unwrap().0;
-
-                // place it into `selected_niche`
-
-                self.niches[selected_niche].add_rated_individual(ind);
-            }
-
         }
 
-        // finally copy the elites into the niches.
+        // keep only the elites in each niche.
 
         for (niche_id, ranked_niche) in ranked_old_niches.into_iter().enumerate() {
-            self.niches[niche_id].append_some(ranked_niche, new_niche_sizes[niche_id].elite_size);
+            for ind in ranked_niche.move_individuals()
+                                   .into_iter()
+                                   .take(new_niche_sizes[niche_id].elite_size) {
+
+                let selected_niche = if rng.gen_range(0, 100) < 10 {
+                    rng.gen_range(0, self.niches.len())
+                } else {
+                    niche_id
+                };
+                self.niches[selected_niche].add_rated_individual(ind);
+            }
         }
+
+        // rate the offspring population
+
+        let rated_offspring_population = RatedPopulation::from_unrated_par(offspring_population,
+                                                                           self.fitness_eval);
+
+        // and place it's individuals into the new niches. use random sampling within the niches to
+        // determine into which niche to place an individual.
+
+        for ind in rated_offspring_population.move_individuals().into_iter() {
+
+            if rng.gen_range(0, 100) < 20 {
+                // randomly insert into a niche.
+                let selected_niche = rng.gen_range(0, self.niches.len());
+                self.niches[selected_niche].add_rated_individual(ind);
+                continue;
+            }
+
+            // sort `ind` into the niche that is closest.
+
+            let distances: Vec<_> = self.niches
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(probe_niche_id, probe_niche)| {
+                                            let mut distance_sum = 0.0;
+                                            for _ in 0..5 {
+                                                if let Some(probe_ind) =
+                                                       probe_niche.random_individual(rng) {
+                                                    distance_sum +=
+                                                        compatibility.distance(&probe_ind.genome(),
+                                                                               &ind.genome());
+                                                }
+                                            }
+                                            (probe_niche_id, Fitness::new(distance_sum))
+                                        })
+                                        .collect();
+
+            let selected_niche = distances.iter().min_by_key(|a| a.1).unwrap().0;
+
+            // place it into `selected_niche`
+
+            self.niches[selected_niche].add_rated_individual(ind);
+        }
+
     }
 
     pub fn into_ranked_population(self) -> RankedPopulation<T> {
