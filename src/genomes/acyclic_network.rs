@@ -552,18 +552,19 @@ impl<NT: NodeType> Genome<NT> {
 
     pub fn crossover<R: Rng>(left_genome: &Self,
                              right_genome: &Self,
-                             c: &ProbabilisticCrossover,
+                             c_nodes: &ProbabilisticCrossover,
+                             c_links: &ProbabilisticCrossover,
                              rng: &mut R)
                              -> Self {
         let mut offspring = Genome::new();
 
-        Genome::crossover_nodes(left_genome, right_genome, &mut offspring, c, rng);
-        let (_, _) = Genome::crossover_links(left_genome, right_genome, &mut offspring, c, rng);
+        Genome::crossover_nodes(left_genome, right_genome, &mut offspring, c_nodes, rng);
+        let (_, _) = Genome::crossover_links(left_genome, right_genome, &mut offspring, c_links, rng);
 
         return offspring;
     }
 
-    /// Crossover the nodes of `left_genome` and `right_genome`. So either take a node from the
+    /// Crossover the nodes of `left_genome` and `right_genome`. Either take a node from the
     /// left or the right, depending on randomness and `c`.
 
     fn crossover_nodes<R: Rng>(left_genome: &Self,
@@ -663,6 +664,7 @@ impl<NT: NodeType> Genome<NT> {
                         // take link weight from right
                         right_link_ref
                     };
+                    // XXX: Modify weight
 
                     offspring.add_link_with_active(link_ref.external_source_node_id().into(),
                                                    link_ref.external_target_node_id().into(),
@@ -692,6 +694,7 @@ impl<NT: NodeType> Genome<NT> {
             let prob = match link_alignment {
                 // Ignore matches. We already handled matching links in "Pass 1".
                 Alignment::Match(_, _) => None,
+
                 Alignment::Disjoint(_, LeftOrRight::Left) => Some(c.prob_disjoint_left),
                 Alignment::Disjoint(_, LeftOrRight::Right) => Some(c.prob_disjoint_right),
                 Alignment::Excess(_, LeftOrRight::Left) => Some(c.prob_excess_left),
@@ -740,6 +743,8 @@ impl<NT: NodeType> Genome<NT> {
                                 // We have to check if the link is valid, for example a connection
                                 // to an input node would be invalid. But we cannot introduce a cycle
                                 // here.
+                                // Actually, as all genomes share all input and output nodes, this
+                                // should never be false!
                                 offspring.valid_link(source_id, target_id)
                             } else {
                                 // No node was added. We also have to check for cycles.
@@ -897,10 +902,10 @@ impl<NT: NodeType> Genome<NT> {
     ///
     /// Returns the number of modifications
     ///
-    /// XXX: Should we only modify active link genes?
+    /// Only modify enabled links
 
     pub fn mutate_link_weights_uniformly<R: Rng>(&mut self,
-                                                 mutate_prob: Prob,
+                                                 mutate_element_prob: Prob,
                                                  weight_perturbance: &WeightPerturbanceMethod,
                                                  link_weight_range: &WeightRange,
                                                  rng: &mut R)
@@ -914,16 +919,19 @@ impl<NT: NodeType> Genome<NT> {
         let mut modifications = 0;
 
         self.network.each_link_mut(|link| {
-            if mutate_prob.flip(rng) {
-                let new_weight = weight_perturbance.perturb(link.weight(), link_weight_range, rng);
-                link.set_weight(new_weight);
-                modifications += 1;
+            if link.is_active() {
+                if mutate_element_prob.flip(rng) {
+                    let new_weight = weight_perturbance.perturb(link.weight(), link_weight_range, rng);
+                    link.set_weight(new_weight);
+                    modifications += 1;
+                }
             }
         });
 
         if modifications == 0 {
-            // Make at least one change to a randomly selected link.
-            let link_idx = self.network.random_link_index(rng).unwrap();
+            info!("no link modifications. use a random link");
+            // Make at least one change to a randomly selected active link.
+            let link_idx = self.network.random_active_link_index(rng).unwrap_or_else(|| self.network.random_link_index(rng).unwrap());
             let link = self.network.link_mut(link_idx);
             let new_weight = weight_perturbance.perturb(link.weight(), link_weight_range, rng);
             link.set_weight(new_weight);
@@ -994,7 +1002,8 @@ pub struct Mater<'a, N, S, C>
 {
     // probability for crossover. P_mutate = 1.0 - p_crossover
     pub p_crossover: Prob,
-    pub p_crossover_detail: ProbabilisticCrossover,
+    pub p_crossover_detail_nodes: ProbabilisticCrossover,
+    pub p_crossover_detail_links: ProbabilisticCrossover,
     pub p_mutate_element: Prob,
     pub weight_perturbance: WeightPerturbanceMethod,
     pub mutate_weights: MutateMethodWeighting,
@@ -1056,7 +1065,7 @@ impl<'a, N, S, C> Mate<Genome<N>> for Mater<'a, N, S, C>
                     rng: &mut R)
                     -> Genome<N> {
         if prefer_mutate == false && self.p_crossover.flip(rng) {
-            Genome::crossover(parent_left, parent_right, &self.p_crossover_detail, rng)
+            Genome::crossover(parent_left, parent_right, &self.p_crossover_detail_nodes, &self.p_crossover_detail_links, rng)
         } else {
             // mutate
             let mutate_method = MutateMethod::random_with(&self.mutate_weights, rng);

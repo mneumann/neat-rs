@@ -54,15 +54,18 @@ impl FitnessEval<Genome<Neuron>> for FitnessEvaluator {
     }
 }
 
-struct ES;
+struct ES {
+    link_weight_range: WeightRange,
+    full_link_weight: Weight,
+}
 
 impl ElementStrategy<Neuron> for ES {
     fn link_weight_range(&self) -> WeightRange {
-        WeightRange::unipolar(1.0)
+        self.link_weight_range
     }
 
     fn full_link_weight(&self) -> Weight {
-        WeightRange::unipolar(1.0).high()
+        self.full_link_weight
     }
 
     fn random_node_type<R: Rng>(&self, _rng: &mut R) -> Neuron {
@@ -111,14 +114,21 @@ fn main() {
         genome
     };
 
+    let es = ES {
+        link_weight_range: cfg.link_weight_range(),
+        full_link_weight: cfg.full_link_weight(),
+    };
+
+
     let mut mater = Mater {
         p_crossover: cfg.p_crossover(),
-        p_crossover_detail: cfg.probabilistic_crossover(),
+        p_crossover_detail_nodes: cfg.probabilistic_crossover_nodes(),
+        p_crossover_detail_links: cfg.probabilistic_crossover_links(),
         p_mutate_element: cfg.p_mutate_element(),
         weight_perturbance: cfg.weight_perturbance(),
         mutate_weights: cfg.mutate_method_weighting(),
         global_cache: &mut cache,
-        element_strategy: &ES,
+        element_strategy: &es,
         _n: PhantomData,
     };
 
@@ -155,6 +165,7 @@ fn main() {
 
         let mut top_n_niches = cfg.num_niches();
 
+        /*
         if fitness_log.len() >= 10 {
             let previous_fitness = fitness_log[fitness_log.len() - 10];
             if best_fitness - previous_fitness < 0.01 {
@@ -162,6 +173,7 @@ fn main() {
                 top_n_niches = 2;
             }
         }
+        */
 
         niche_runner.reproduce(cfg.population_size(),
                                top_n_niches,

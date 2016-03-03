@@ -205,17 +205,64 @@ impl<'a, T, F> NicheRunner<'a, T, F>
             // individuals.
 
             for _ in 0..repro.offspring_size {
-                let (parent1, parent2) = ranked_niche.select_parent_indices(repro.select_size,
-                                                                            3,
-                                                                            rng);
-                debug_assert!(parent1 <= parent2);
+                // let parent1 = rng.gen_range(0, cmp::min(ranked_niche.len(), repro.select_size));
 
-                let offspring = mate.mate(&ranked_niche.individuals()[parent1].genome(),
-                                          &ranked_niche.individuals()[parent2].genome(),
-                                          parent1 == parent2,
-                                          rng);
+                if rng.gen_range(0, 100) < 50 {
+                    // we want to mutate
 
-                offspring_population.add_unrated_individual(Individual::new_unrated(Box::new(offspring)));
+                    let parent1 = rng.gen_range(0, ranked_niche.len());
+                    let parent2 = rng.gen_range(0, ranked_niche.len());
+
+                    // for mutation prefer worse performing genomes
+
+                    let parent = cmp::max(parent1, parent2);
+
+                    let offspring = mate.mate(&ranked_niche.individuals()[parent1].genome(),
+                                              &ranked_niche.individuals()[parent2].genome(),
+                                              true,
+                                              rng);
+
+                    offspring_population.add_unrated_individual(Individual::new_unrated(Box::new(offspring)));
+                } else {
+                    // crossover
+
+                    // choose the first mating parter.
+
+                    let parent_a1 = rng.gen_range(0, ranked_niche.len());
+                    let parent_a2 = rng.gen_range(0, ranked_niche.len());
+
+                    // we prefer better genomes
+                    let parent1 = cmp::min(parent_a1, parent_a2);
+
+                    // choose the second mating parter.
+                    let parent_b1 = rng.gen_range(0, ranked_niche.len());
+                    let parent_b2 = rng.gen_range(0, ranked_niche.len());
+
+                    // prefer the one that has a higher distance.
+                    
+                    let dist_b1 = compatibility.distance(ranked_niche.individuals()[parent_b1].genome(),
+                                                         ranked_niche.individuals()[parent1].genome());
+
+
+                    let dist_b2 = compatibility.distance(ranked_niche.individuals()[parent_b2].genome(),
+                                                         ranked_niche.individuals()[parent1].genome());
+
+
+                    let parent2 = if dist_b1 > dist_b2 {
+                        parent_b1
+                        } else { parent_b2 };
+
+
+
+                    let offspring = mate.mate(&ranked_niche.individuals()[parent1].genome(),
+                                              &ranked_niche.individuals()[parent2].genome(),
+                                              parent1 == parent2,
+                                              rng);
+
+                    offspring_population.add_unrated_individual(Individual::new_unrated(Box::new(offspring)));
+                }
+
+
             }
         }
 

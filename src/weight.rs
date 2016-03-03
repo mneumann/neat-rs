@@ -1,4 +1,5 @@
-use rand::{Rng, Closed01};
+use rand::{self, Rng, Closed01};
+use rand::distributions::{Normal, IndependentSample};
 
 /// Represents a connection weight.
 #[derive(Debug, Clone, Copy)]
@@ -94,6 +95,7 @@ impl WeightRange {
 }
 
 /// Defines a perturbance method.
+#[derive(Debug, Clone, Copy)]
 pub enum WeightPerturbanceMethod {
     JiggleUniform {
         range: WeightRange,
@@ -115,7 +117,10 @@ impl WeightPerturbanceMethod {
             WeightPerturbanceMethod::JiggleUniform { range } => {
                 weight_range.clip_weight(Weight(weight.0 + range.random_weight(rng).0))
             }
-            WeightPerturbanceMethod::JiggleGaussian {..} => unimplemented!(),
+            WeightPerturbanceMethod::JiggleGaussian { sigma } => {
+                let normal = Normal::new(0.0, sigma);
+                weight_range.clip_weight(Weight(weight.0 + normal.ind_sample(rng)))
+            }
         }
     }
 }

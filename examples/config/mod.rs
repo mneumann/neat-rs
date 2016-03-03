@@ -1,7 +1,7 @@
 use std::env;
 use neat::crossover::ProbabilisticCrossover;
 use neat::mutate::MutateMethodWeighting;
-use neat::weight::{WeightRange, WeightPerturbanceMethod};
+use neat::weight::{Weight, WeightRange, WeightPerturbanceMethod};
 use neat::prob::Prob;
 use neat::genomes::acyclic_network::GenomeDistance;
 use asexp::Sexp;
@@ -17,7 +17,8 @@ pub struct Configuration {
     target_graph_file: Option<String>,
 
     mutate_method_weighting: MutateMethodWeighting,
-    probabilistic_crossover: ProbabilisticCrossover,
+    probabilistic_crossover_nodes: ProbabilisticCrossover,
+    probabilistic_crossover_links: ProbabilisticCrossover,
     
     p_crossover: Prob,
     p_mutate_element: Prob,
@@ -27,6 +28,10 @@ pub struct Configuration {
 
     compatibility_threshold: f64,
     genome_compatibility: GenomeDistance,
+
+    weight_perturbance_method: WeightPerturbanceMethod,
+    link_weight_range: WeightRange,
+    full_link_weight: Weight,
 
     stop_after_iterations: usize,
 
@@ -106,8 +111,16 @@ impl Configuration {
                 w_add_node: 1,
             },
 
-            probabilistic_crossover: ProbabilisticCrossover {
-                prob_match_left: Prob::new(0.5), // NEAT always selects a random parent for matching genes
+            probabilistic_crossover_nodes: ProbabilisticCrossover {
+                prob_match_left: Prob::new(1.0),
+                prob_disjoint_left: Prob::new(1.0),
+                prob_excess_left: Prob::new(1.0),
+                prob_disjoint_right: Prob::new(0.0),
+                prob_excess_right: Prob::new(0.0),
+            },
+
+            probabilistic_crossover_links: ProbabilisticCrossover {
+                prob_match_left: Prob::new(0.5), // NEAT always selects a random parent for matching link genes
                 prob_disjoint_left: Prob::new(0.9),
                 prob_excess_left: Prob::new(0.9),
                 prob_disjoint_right: Prob::new(0.15),
@@ -126,6 +139,10 @@ impl Configuration {
                 disjoint: 1.0,
                 weight: 0.0,
             },
+
+            weight_perturbance_method: WeightPerturbanceMethod::JiggleGaussian{ sigma: 0.1 },
+            link_weight_range: WeightRange::bipolar(1.0),
+            full_link_weight: Weight(0.1),
 
             stop_after_iterations: 100,
 
@@ -182,21 +199,35 @@ impl Configuration {
             cfg.genome_compatibility.weight= val;
         }
 
+        if let Some(val) = parse_float(&map, "weight_perturbance_magnitude") {
+            assert!(val >= 0.0);
+            cfg.weight_perturbance_method = WeightPerturbanceMethod::JiggleGaussian{sigma: val};
+        }
+        if let Some(val) = parse_float(&map, "link_weight_range") {
+            assert!(val >= 0.0);
+            cfg.link_weight_range = WeightRange::bipolar(val);
+        }
+        if let Some(val) = parse_float(&map, "full_link_weight") {
+            cfg.full_link_weight = Weight(val);
+        }
+
         if let Some(val) = parse_prob(&map, "px_match_left") {
-            cfg.probabilistic_crossover.prob_match_left = val;
+            cfg.probabilistic_crossover_links.prob_match_left = val;
         }
         if let Some(val) = parse_prob(&map, "px_disjoint_left") {
-            cfg.probabilistic_crossover.prob_disjoint_left = val;
+            cfg.probabilistic_crossover_links.prob_disjoint_left = val;
         }
         if let Some(val) = parse_prob(&map, "px_excess_left") {
-            cfg.probabilistic_crossover.prob_excess_left = val;
+            cfg.probabilistic_crossover_links.prob_excess_left = val;
         }
         if let Some(val) = parse_prob(&map, "px_disjoint_right") {
-            cfg.probabilistic_crossover.prob_disjoint_right = val;
+            cfg.probabilistic_crossover_links.prob_disjoint_right = val;
         }
         if let Some(val) = parse_prob(&map, "px_excess_right") {
-            cfg.probabilistic_crossover.prob_excess_right = val;
+            cfg.probabilistic_crossover_links.prob_excess_right = val;
         }
+
+        // XXX: nodes
 
         if let Some(val) = parse_prob(&map, "p_crossover") {
             cfg.p_crossover = val;
@@ -225,7 +256,14 @@ impl Configuration {
     }
 
     pub fn weight_perturbance(&self) -> WeightPerturbanceMethod {
-        WeightPerturbanceMethod::JiggleUniform{range: WeightRange::bipolar(0.1)}
+        self.weight_perturbance_method
+    }
+    pub fn link_weight_range(&self) -> WeightRange {
+        self.link_weight_range
+    }
+
+    pub fn full_link_weight(&self) -> Weight {
+        self.full_link_weight
     }
 
     pub fn elite_percentage(&self) -> Closed01<f64> {
@@ -280,8 +318,12 @@ impl Configuration {
         &self.genome_compatibility
     }
 
-    pub fn probabilistic_crossover(&self) -> ProbabilisticCrossover {
-        self.probabilistic_crossover
+    pub fn probabilistic_crossover_nodes(&self) -> ProbabilisticCrossover {
+        self.probabilistic_crossover_nodes
+    }
+
+    pub fn probabilistic_crossover_links(&self) -> ProbabilisticCrossover {
+        self.probabilistic_crossover_links
     }
 
     pub fn mutate_method_weighting(&self) -> MutateMethodWeighting {

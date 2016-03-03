@@ -24,18 +24,19 @@ use rand::Rng;
 use std::marker::PhantomData;
 use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml};
 use cppn::cppn::{Cppn, CppnNode};
-use cppn::bipolar::BipolarActivationFunction;
+use cppn::activation_function::GeometricActivationFunction;
 use cppn::substrate::Substrate;
 use cppn::position::Position2d;
 use neat::weight::{Weight, WeightRange};
 use neat::distribute::DistributeInterval;
 use closed01::Closed01;
 
-type Node = CppnNode<BipolarActivationFunction>;
+type Node = CppnNode<GeometricActivationFunction>;
 
 fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     let mut substrate = Substrate::new();
 
+    // XXX: Todo 3d position
     let mut y_iter = DistributeInterval::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
 
     // Inputs
@@ -70,6 +71,7 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
 struct FitnessEvaluator {
     sim: GraphSimilarity,
     node_count: NodeCount,
+    //weight_threshold: f64,
 }
 
 impl FitnessEvaluator {
@@ -83,10 +85,17 @@ impl FitnessEvaluator {
             let _ = builder.add_node(i, node.node_type.clone());
         }
         for link in substrate.iter_links(&mut cppn, None) {
-            if link.weight >= 0.0 && link.weight <= 1.0 {
+            let mut w = link.weight;
+            if w > 0.1 {//cppn_weight_threshold_min && w < cppn_weight_threshold_max {
+                //let normalized = (w - cppn_weight_threshold_min) / (cppn_weight_threshold_max - cppn_weight_threshold_min);
+                //if w > 1.0 {
+                //    w = 1.0;
+                //}
+
                 builder.add_edge(link.source_idx,
                                  link.target_idx,
-                                 Closed01::new(link.weight as f32));
+                                 Closed01::new(w as f32));
+                //}
             }
         }
         return builder.graph();
@@ -100,25 +109,23 @@ impl FitnessEval<Genome<Node>> for FitnessEvaluator {
     }
 }
 
-struct ES;
+struct ES {
+    activation_functions: Vec<GeometricActivationFunction>,
+    link_weight_range: WeightRange,
+    full_link_weight: Weight,
+}
 
 impl ElementStrategy<Node> for ES {
     fn link_weight_range(&self) -> WeightRange {
-        WeightRange::bipolar(1.0)
+        self.link_weight_range
     }
 
     fn full_link_weight(&self) -> Weight {
-        self.link_weight_range().high()
+        self.full_link_weight
     }
 
     fn random_node_type<R: Rng>(&self, rng: &mut R) -> Node {
-        let af = &[BipolarActivationFunction::Identity,
-                   BipolarActivationFunction::Linear,
-                   BipolarActivationFunction::Gaussian,
-                   BipolarActivationFunction::Sigmoid,
-                   BipolarActivationFunction::Sine];
-
-        CppnNode::Hidden(*rng.choose(af).unwrap())
+        CppnNode::hidden(*rng.choose(&self.activation_functions).unwrap())
     }
 }
 
@@ -154,19 +161,17 @@ fn main() {
 
         // 4 inputs (x1,y1,x2,y2)
         for _ in 0..4 {
-            genome.add_node(cache.create_node_innovation(), CppnNode::Input);
+            genome.add_node(cache.create_node_innovation(), CppnNode::input(GeometricActivationFunction::Linear));
         }
 
-        // 3 inputs for distance (source to origin, target to origin, source to target)
-        for _ in 0..3 {
-            genome.add_node(cache.create_node_innovation(), CppnNode::Input);
-        }
+        // 1 input for distance from source to target neuron
+        genome.add_node(cache.create_node_innovation(), CppnNode::input(GeometricActivationFunction::Linear));
 
         // 1 output (y)
-        genome.add_node(cache.create_node_innovation(), CppnNode::Output);
+        genome.add_node(cache.create_node_innovation(), CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
 
         // 1 bias node
-        genome.add_node(cache.create_node_innovation(), CppnNode::Bias);
+        genome.add_node(cache.create_node_innovation(), CppnNode::bias(GeometricActivationFunction::Constant1));
 
         genome
     };
@@ -186,14 +191,30 @@ fn main() {
         niche_runner.add_unrated_population_as_niche(pop);
     }
 
+    let es = ES {
+        activation_functions: vec![
+            //GeometricActivationFunction::Linear,
+            GeometricActivationFunction::LinearBipolarClipped,
+            GeometricActivationFunction::BipolarGaussian,
+            //GeometricActivationFunction::Gaussian,
+            GeometricActivationFunction::BipolarSigmoid,
+            //GeometricActivationFunction::Absolute,
+            GeometricActivationFunction::Sine,
+            //GeometricActivationFunction::Cosine
+        ],
+        link_weight_range: cfg.link_weight_range(),
+        full_link_weight: cfg.full_link_weight(),
+    };
+
     let mut mater = Mater {
         p_crossover: cfg.p_crossover(),
-        p_crossover_detail: cfg.probabilistic_crossover(),
+        p_crossover_detail_nodes: cfg.probabilistic_crossover_nodes(),
+        p_crossover_detail_links: cfg.probabilistic_crossover_links(),
         p_mutate_element: cfg.p_mutate_element(),
         weight_perturbance: cfg.weight_perturbance(),
         mutate_weights: cfg.mutate_method_weighting(),
         global_cache: &mut cache,
-        element_strategy: &ES,
+        element_strategy: &es,
         _n: PhantomData,
     };
 
@@ -224,6 +245,8 @@ fn main() {
     }
 
     let final_pop = niche_runner.into_ranked_population();
+
+    // XXX: Display CPPN
 
     {
         let best = final_pop.best_individual().unwrap();
