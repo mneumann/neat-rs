@@ -20,27 +20,11 @@ use neat::niching::NicheRunner;
 use neat::traits::{FitnessEval};
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater, ElementStrategy};
 use neat::fitness::Fitness;
-use graph_neighbor_matching::graph::{OwnedGraph, GraphBuilder};
 use rand::Rng;
 use std::marker::PhantomData;
-use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml};
+use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml, genome_to_network};
 use neat::weight::{Weight, WeightRange};
-use closed01::Closed01;
-
-fn genome_to_graph(genome: &Genome<Neuron>) -> OwnedGraph<Neuron> {
-    let mut builder = GraphBuilder::new();
-
-    genome.visit_nodes(|ext_id, node_type| {
-        // make sure the node exists, even if there are no connection to it.
-        let _ = builder.add_node(ext_id, node_type);
-    });
-
-    genome.visit_active_links(|src_id, target_id, weight| {
-        builder.add_edge(src_id, target_id, Closed01::new(weight.into()));
-    });
-
-    return builder.graph();
-}
+use graph_neighbor_matching::NodeColorWeight;
 
 #[derive(Debug)]
 struct FitnessEvaluator {
@@ -50,7 +34,7 @@ struct FitnessEvaluator {
 impl FitnessEval<Genome<Neuron>> for FitnessEvaluator {
     // A larger fitness means "better"
     fn fitness(&self, genome: &Genome<Neuron>) -> Fitness {
-        Fitness::new(self.sim.fitness(&genome_to_graph(genome)) as f64)
+        Fitness::new(self.sim.fitness(&genome_to_network(genome)) as f64)
     }
 }
 
@@ -190,13 +174,13 @@ fn main() {
     {
         let best = final_pop.best_individual().unwrap();
         println!("best fitness: {:.3}", best.fitness().get());
-        write_gml("best.gml", &genome_to_graph(best.genome()));
+        write_gml("best.gml", &genome_to_network(best.genome()), &Neuron::node_color_weight);
     }
 
     for (i, ind) in final_pop.individuals().iter().enumerate() {
         //println!("individual #{}: {:.3}", i, ind.fitness().get());
-        write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &genome_to_graph(ind.genome()));
+        write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &genome_to_network(ind.genome()), &Neuron::node_color_weight);
     }
 
-    write_gml("target.gml", &fitness_evaluator.sim.target_graph);
+    write_gml("target.gml", &fitness_evaluator.sim.target_graph, &Neuron::node_color_weight);
 }

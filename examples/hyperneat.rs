@@ -20,9 +20,10 @@ use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache,
                                      ElementStrategy};
 use neat::fitness::Fitness;
 use graph_neighbor_matching::graph::{GraphBuilder, OwnedGraph};
+use graph_neighbor_matching::NodeColorWeight;
 use rand::Rng;
 use std::marker::PhantomData;
-use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml};
+use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml, NodeLabel, genome_to_petgraph, write_gml_petgraph};
 use cppn::cppn::{Cppn, CppnNode};
 use cppn::activation_function::GeometricActivationFunction;
 use cppn::substrate::Substrate;
@@ -32,6 +33,12 @@ use neat::distribute::DistributeInterval;
 use closed01::Closed01;
 
 type Node = CppnNode<GeometricActivationFunction>;
+
+impl NodeLabel for Node {
+    fn node_label(&self) -> Option<String> {
+        Some(format!("{:?}", self))
+    }
+}
 
 fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     let mut substrate = Substrate::new();
@@ -246,17 +253,18 @@ fn main() {
 
     let final_pop = niche_runner.into_ranked_population();
 
-    // XXX: Display CPPN
-
     {
         let best = final_pop.best_individual().unwrap();
-        write_gml("best.gml", &fitness_evaluator.genome_to_graph(best.genome()));
+        write_gml("best.gml", &fitness_evaluator.genome_to_graph(best.genome()), &Neuron::node_color_weight);
+
+        // display CPPN
+        write_gml_petgraph("best_cppn.gml", &genome_to_petgraph(best.genome()), &|_| 0.0);
     }
 
     for (i, ind) in final_pop.individuals().iter().enumerate() {
         println!("individual #{}: {:.3}", i, ind.fitness().get());
-        write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &fitness_evaluator.genome_to_graph(ind.genome()));
+        write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &fitness_evaluator.genome_to_graph(ind.genome()), &Neuron::node_color_weight);
     }
 
-    write_gml("target.gml", &fitness_evaluator.sim.target_graph);
+    write_gml("target.gml", &fitness_evaluator.sim.target_graph, &Neuron::node_color_weight);
 }
