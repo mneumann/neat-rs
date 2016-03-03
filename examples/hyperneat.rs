@@ -17,16 +17,17 @@ use neat::population::{UnratedPopulation, Individual, Population, PopulationWith
 use neat::niching::NicheRunner;
 use neat::traits::FitnessEval;
 use neat::genomes::acyclic_network::{Genome, GlobalCache, GlobalInnovationCache, Mater,
-                                     ElementStrategy};
+ElementStrategy};
 use neat::fitness::Fitness;
 use graph_neighbor_matching::graph::{GraphBuilder, OwnedGraph};
 use graph_neighbor_matching::NodeColorWeight;
 use rand::Rng;
 use std::marker::PhantomData;
-use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml, NodeLabel, genome_to_petgraph, write_gml_petgraph};
-use cppn::cppn::{Cppn, CppnNode};
+use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeCount, write_gml, NodeLabel, genome_to_petgraph, write_gml_petgraph,
+write_petgraph_as_dot};
+use cppn::cppn::{Cppn, CppnNode, CppnNodeKind};
 use cppn::activation_function::GeometricActivationFunction;
-use cppn::substrate::Substrate;
+use cppn::substrate::{Substrate, Layer, LinkMode};
 use cppn::position::Position2d;
 use neat::weight::{Weight, WeightRange};
 use neat::distribute::DistributeInterval;
@@ -35,8 +36,37 @@ use closed01::Closed01;
 type Node = CppnNode<GeometricActivationFunction>;
 
 impl NodeLabel for Node {
-    fn node_label(&self) -> Option<String> {
-        Some(format!("{:?}", self))
+    fn node_label(&self, node_idx: usize) -> Option<String> {
+        match self.kind { 
+            CppnNodeKind::Input => {
+                match node_idx {
+                    0 => Some("x_s".to_owned()),
+                    1 => Some("y_s".to_owned()),
+                    2 => Some("x_t".to_owned()),
+                    3 => Some("y_t".to_owned()),
+                    4 => Some("d".to_owned()),
+                    _ => None,
+                }
+            }
+            CppnNodeKind::Bias => { 
+                Some("Bias".to_owned())
+            }
+            CppnNodeKind::Hidden => {
+                Some(format!("{:?}", self.activation_function))
+            }
+            CppnNodeKind::Output => {
+                Some("Output".to_owned())
+            }
+        }
+
+    }
+    fn node_shape(&self) -> &'static str {
+        match self.kind { 
+            CppnNodeKind::Input => "circle",
+            CppnNodeKind::Bias => "triangle",
+            CppnNodeKind::Hidden => "box",
+            CppnNodeKind::Output => "doublecircle",
+        }
     }
 }
 
@@ -46,11 +76,15 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     // XXX: Todo 3d position
     let mut y_iter = DistributeInterval::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
 
-    // Inputs
+    let mut input_layer = Layer::new();
+    let mut hidden_layer = Layer::new();
+    let mut output_layer = Layer::new();
+
+    // Input layer
     {
         let y = y_iter.next().unwrap();
         for x in DistributeInterval::new(node_count.inputs, -1.0, 1.0) {
-            substrate.add_node(Position2d::new(x, y), Neuron::Input);
+            input_layer.add_node(Position2d::new(x, y), Neuron::Input);
         }
     }
 
@@ -58,7 +92,7 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     {
         let y = y_iter.next().unwrap();
         for x in DistributeInterval::new(node_count.hidden, -1.0, 1.0) {
-            substrate.add_node(Position2d::new(x, y), Neuron::Hidden);
+            hidden_layer.add_node(Position2d::new(x, y), Neuron::Hidden);
         }
     }
 
@@ -66,9 +100,18 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     {
         let y = y_iter.next().unwrap();
         for x in DistributeInterval::new(node_count.outputs, -1.0, 1.0) {
-            substrate.add_node(Position2d::new(x, y), Neuron::Output);
+            output_layer.add_node(Position2d::new(x, y), Neuron::Output);
         }
     }
+
+    let i = substrate.add_layer(input_layer);
+    let h = substrate.add_layer(hidden_layer);
+    let o = substrate.add_layer(output_layer);
+
+    substrate.add_layer_link(i, h, None);
+    substrate.add_layer_link(h, h, None);
+    substrate.add_layer_link(h, o, None);
+    substrate.add_layer_link(i, o, None);
 
     return substrate;
 }
@@ -88,12 +131,19 @@ impl FitnessEvaluator {
 
         // now develop the cppn. the result is a graph
         let mut builder = GraphBuilder::new();
-        for (i, node) in substrate.nodes().iter().enumerate() {
-            let _ = builder.add_node(i, node.node_type.clone());
+        for (layer_idx, layer) in substrate.layers().iter().enumerate() { 
+            for (node_idx, node) in layer.nodes().iter().enumerate() {
+                let _ = builder.add_node((layer_idx, node_idx), node.node_type.clone());
+            }
         }
-        for link in substrate.iter_links(&mut cppn, None) {
-            let mut w = link.weight;
-            if w > 0.1 {//cppn_weight_threshold_min && w < cppn_weight_threshold_max {
+
+        substrate.each_link(&mut cppn, LinkMode::RelativePositionOfTarget, &mut |link| {
+            let mut w0 = link.outputs[0];
+            let mut w1 = link.outputs[1];
+
+            if w0 > w1 {
+                let w = w0.abs();
+            //if w > 0.5 {//cppn_weight_threshold_min && w < cppn_weight_threshold_max {
                 //let normalized = (w - cppn_weight_threshold_min) / (cppn_weight_threshold_max - cppn_weight_threshold_min);
                 //if w > 1.0 {
                 //    w = 1.0;
@@ -104,7 +154,8 @@ impl FitnessEvaluator {
                                  Closed01::new(w as f32));
                 //}
             }
-        }
+        });
+
         return builder.graph();
     }
 }
@@ -136,14 +187,12 @@ impl ElementStrategy<Node> for ES {
     }
 }
 
-fn main() {
-    env_logger::init().unwrap();
-
+fn run(run_no: usize, cfg: &config::Configuration) {
     let mut rng = rand::thread_rng();
 
-    let cfg = config::Configuration::from_file();
-
-    println!("{:?}", cfg);
+    println!("------------------------");
+    println!("RUN #{}", run_no);
+    println!("------------------------");
 
     let target_graph = load_graph(&cfg.target_graph_file(), convert_neuron_from_str);
     let node_count = NodeCount::from_graph(&target_graph);
@@ -160,25 +209,41 @@ fn main() {
 
     let mut cache = GlobalInnovationCache::new();
 
-
     // start with minimal random topology.
 
     let template_genome = {
         let mut genome = Genome::new();
 
         // 4 inputs (x1,y1,x2,y2)
-        for _ in 0..4 {
-            genome.add_node(cache.create_node_innovation(), CppnNode::input(GeometricActivationFunction::Linear));
-        }
+        let n_input1 = cache.create_node_innovation();
+        let n_input2 = cache.create_node_innovation();
+        let n_input3 = cache.create_node_innovation();
+        let n_input4 = cache.create_node_innovation();
+        genome.add_node(n_input1, CppnNode::input(GeometricActivationFunction::Linear));
+        genome.add_node(n_input2, CppnNode::input(GeometricActivationFunction::Linear));
+        genome.add_node(n_input3, CppnNode::input(GeometricActivationFunction::Linear));
+        genome.add_node(n_input4, CppnNode::input(GeometricActivationFunction::Linear));
 
         // 1 input for distance from source to target neuron
-        genome.add_node(cache.create_node_innovation(), CppnNode::input(GeometricActivationFunction::Linear));
+        //let n_distance = cache.create_node_innovation();
+        //genome.add_node(n_distance, CppnNode::input(GeometricActivationFunction::Linear));
 
-        // 1 output (y)
-        genome.add_node(cache.create_node_innovation(), CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
+        // 2 output (o1, o2)
+        let n_output1 = cache.create_node_innovation();
+        let n_output2 = cache.create_node_innovation();
+        genome.add_node(n_output1, CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
+        genome.add_node(n_output2, CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
 
         // 1 bias node
-        genome.add_node(cache.create_node_innovation(), CppnNode::bias(GeometricActivationFunction::Constant1));
+        //let n_bias = cache.create_node_innovation();
+        //genome.add_node(n_bias, CppnNode::bias(GeometricActivationFunction::Constant1));
+
+        // connect all input/bias nodes to the output node.
+        /*
+        for &from in &[n_input1, n_input2, n_input3, n_input4] { //, n_distance, n_bias] {
+            genome.add_link(from, n_output, cache.get_or_create_link_innovation(from, n_output), cfg.link_weight_range().random_weight(&mut rng));
+        }
+        */
 
         genome
     };
@@ -201,7 +266,7 @@ fn main() {
     let es = ES {
         activation_functions: vec![
             //GeometricActivationFunction::Linear,
-            GeometricActivationFunction::LinearBipolarClipped,
+            //GeometricActivationFunction::LinearBipolarClipped,
             GeometricActivationFunction::BipolarGaussian,
             //GeometricActivationFunction::Gaussian,
             GeometricActivationFunction::BipolarSigmoid,
@@ -228,43 +293,65 @@ fn main() {
     let mut fitness_log: Vec<f64> = Vec::new();
 
     while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
-        println!("iteration: {}", niche_runner.current_iteration());
+        println!("R{:03} iteration: {}", run_no, niche_runner.current_iteration());
 
         let best_fitness = niche_runner.best_individual().unwrap().fitness().get();;
-        println!("best fitness: {:2}", best_fitness); 
-        println!("num individuals: {}", niche_runner.num_individuals());
+        println!("R{:03} best fitness: {:2}", run_no, best_fitness); 
+        println!("R{:03} num individuals: {}", run_no, niche_runner.num_individuals());
 
         if best_fitness > cfg.stop_if_fitness_better_than() {
-            println!("Premature abort.");
+            println!("R{:03} Premature abort.", run_no);
             break;
         }
 
         let mut top_n_niches = cfg.num_niches();
 
         niche_runner.reproduce(cfg.population_size(),
-                               top_n_niches,
-                               cfg.elite_percentage(),
-                               cfg.selection_percentage(),
-                               cfg.compatibility_threshold(),
-                               cfg.genome_compatibility(),
-                               &mut mater,
-                               &mut rng);
+        top_n_niches,
+        cfg.elite_percentage(),
+        cfg.selection_percentage(),
+        cfg.compatibility_threshold(),
+        cfg.genome_compatibility(),
+        &mut mater,
+        &mut rng);
     }
 
     let final_pop = niche_runner.into_ranked_population();
 
-    {
-        let best = final_pop.best_individual().unwrap();
-        write_gml("best.gml", &fitness_evaluator.genome_to_graph(best.genome()), &Neuron::node_color_weight);
+    let best = final_pop.best_individual().unwrap();
 
-        // display CPPN
-        write_gml_petgraph("best_cppn.gml", &genome_to_petgraph(best.genome()), &|_| 0.0);
+    println!("R{:03} best fitness: {:?}", run_no, best.fitness());
+
+    if best.fitness().get() < 0.8 {
+        println!("R{:03} no output", run_no);
+        return;
     }
 
+    {
+        write_gml(&format!("{:03}_best.gml", run_no), &fitness_evaluator.genome_to_graph(best.genome()), &Neuron::node_color_weight);
+
+        // display CPPN
+        write_gml_petgraph(&format!("{:03}_best_cppn.gml", run_no), &genome_to_petgraph(best.genome()), &|_| 0.0);
+        write_petgraph_as_dot(&format!("{:03}_best_cppn.dot", run_no), &genome_to_petgraph(best.genome()), &|_| 0.0);
+    }
+
+    /*
     for (i, ind) in final_pop.individuals().iter().enumerate() {
         println!("individual #{}: {:.3}", i, ind.fitness().get());
         write_gml(&format!("ind_{:03}_{}.gml", i, (ind.fitness().get() * 100.0) as usize), &fitness_evaluator.genome_to_graph(ind.genome()), &Neuron::node_color_weight);
     }
+    */
 
-    write_gml("target.gml", &fitness_evaluator.sim.target_graph, &Neuron::node_color_weight);
+    write_gml(&format!("{:03}_target.gml", run_no), &fitness_evaluator.sim.target_graph, &Neuron::node_color_weight);
+}
+
+fn main() {
+    env_logger::init().unwrap();
+
+    let cfg = config::Configuration::from_file();
+    println!("{:?}", cfg);
+
+    for i in 0..100 {
+        run(i, &cfg);
+    }
 }

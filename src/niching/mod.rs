@@ -191,9 +191,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         // Produce offspring. XXX: parallel loop (rng!)
 
-        let mut offspring_population = UnratedPopulation::new(); // XXX: With capacity
-
-        for (niche_id, (ranked_niche, repro)) in ranked_old_niches.iter()
+        for (niche_id, (ranked_niche, repro)) in ranked_old_niches.into_iter()
                                                                   .zip(new_niche_sizes.iter())
                                                                   .enumerate() {
 
@@ -201,21 +199,24 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                 continue;
             }
 
+            let mut offspring_population = UnratedPopulation::new(); // XXX: With capacity
+
             // produce `offspring_size` individuals from the top `select_size`
             // individuals.
 
-            for _ in 0..repro.offspring_size {
-                // let parent1 = rng.gen_range(0, cmp::min(ranked_niche.len(), repro.select_size));
-
+            for _ in 0..repro.new_niche_size as usize{
+                let select_size = cmp::min(repro.select_size, ranked_niche.len());
+                /*
                 if rng.gen_range(0, 100) < 50 {
                     // we want to mutate
 
-                    let parent1 = rng.gen_range(0, ranked_niche.len());
-                    let parent2 = rng.gen_range(0, ranked_niche.len());
+                    let parent1 = rng.gen_range(0, select_size);
+                    let parent2 = rng.gen_range(0, select_size);
 
                     // for mutation prefer worse performing genomes
 
-                    let parent = cmp::max(parent1, parent2);
+                    // let parent = cmp::max(parent1, parent2);
+                    let parent = cmp::min(parent1, parent2);
 
                     let offspring = mate.mate(&ranked_niche.individuals()[parent1].genome(),
                                               &ranked_niche.individuals()[parent2].genome(),
@@ -224,35 +225,42 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
                     offspring_population.add_unrated_individual(Individual::new_unrated(Box::new(offspring)));
                 } else {
+                */
                     // crossover
 
                     // choose the first mating parter.
 
-                    let parent_a1 = rng.gen_range(0, ranked_niche.len());
-                    let parent_a2 = rng.gen_range(0, ranked_niche.len());
+                    let parent_a1 = rng.gen_range(0, select_size);
+                    //let parent_a2 = rng.gen_range(0, select_size);
 
-                    // we prefer better genomes
-                    let parent1 = cmp::min(parent_a1, parent_a2);
+                    //// we prefer better genomes
+                    let parent1 = parent_a1; //cmp::min(parent_a1, parent_a2);
 
                     // choose the second mating parter.
                     let parent_b1 = rng.gen_range(0, ranked_niche.len());
-                    let parent_b2 = rng.gen_range(0, ranked_niche.len());
+                    /*
+                    let parent_b2 = rng.gen_range(0, select_size);
 
                     // prefer the one that has a higher distance.
-                    
-                    let dist_b1 = compatibility.distance(ranked_niche.individuals()[parent_b1].genome(),
-                                                         ranked_niche.individuals()[parent1].genome());
+
+                    let dist_b1 = compatibility.distance(ranked_niche.individuals()[parent_b1]
+                                                             .genome(),
+                                                         ranked_niche.individuals()[parent1]
+                                                             .genome());
 
 
-                    let dist_b2 = compatibility.distance(ranked_niche.individuals()[parent_b2].genome(),
-                                                         ranked_niche.individuals()[parent1].genome());
-
+                    let dist_b2 = compatibility.distance(ranked_niche.individuals()[parent_b2]
+                                                             .genome(),
+                                                         ranked_niche.individuals()[parent1]
+                                                             .genome());
 
                     let parent2 = if dist_b1 > dist_b2 {
                         parent_b1
-                        } else { parent_b2 };
-
-
+                    } else {
+                        parent_b2
+                    };
+*/
+                    let parent2 = parent_b1;
 
                     let offspring = mate.mate(&ranked_niche.individuals()[parent1].genome(),
                                               &ranked_niche.individuals()[parent2].genome(),
@@ -260,39 +268,58 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                                               rng);
 
                     offspring_population.add_unrated_individual(Individual::new_unrated(Box::new(offspring)));
-                }
+                //}
+            }
+
+            // rate the offspring population
+            let rated_offspring_population =
+                RatedPopulation::from_unrated_par(offspring_population, self.fitness_eval);
 
 
+            let mut new_niche = RatedPopulation::new();
+
+            // copy elites
+
+            for ind in ranked_niche.move_individuals().into_iter().take(repro.elite_size) {
+                new_niche.add_rated_individual(ind);
+            }
+
+            new_niche.append_all(rated_offspring_population);
+
+            let new_niche = RankedPopulation::from_rated(new_niche);
+
+            // take the best
+
+            for ind in new_niche.move_individuals().into_iter().take(repro.new_niche_size as usize) {
+                self.niches[niche_id].add_rated_individual(ind);
             }
         }
 
         // keep only the elites in each niche.
+        // move the parents out
 
+        /*
         for (niche_id, ranked_niche) in ranked_old_niches.into_iter().enumerate() {
-            for ind in ranked_niche.move_individuals()
-                                   .into_iter()
-                                   .take(new_niche_sizes[niche_id].elite_size) {
-
-                let selected_niche = if rng.gen_range(0, 100) < 10 {
-                    rng.gen_range(0, self.niches.len())
+            for (ind_i, ind) in ranked_niche.move_individuals().into_iter().enumerate() {
+                if ind_i < new_niche_sizes[niche_id].elite_size {
+                    let selected_niche = niche_id;
                 } else {
-                    niche_id
-                };
-                self.niches[selected_niche].add_rated_individual(ind);
+                    rated_parents_population.add_rated_individual(ind);
+                }
             }
         }
 
-        // rate the offspring population
+        // merge rated_offspring_population and rated_parents_population
 
-        let rated_offspring_population = RatedPopulation::from_unrated_par(offspring_population,
-                                                                           self.fitness_eval);
+        // rated_parents_population.append_all(rated_offspring_population);
+
 
         // and place it's individuals into the new niches. use random sampling within the niches to
         // determine into which niche to place an individual.
 
         for ind in rated_offspring_population.move_individuals().into_iter() {
 
-            if rng.gen_range(0, 100) < 20 {
+            if rng.gen_range(0, 100) < 1 {
                 // randomly insert into a niche.
                 let selected_niche = rng.gen_range(0, self.niches.len());
                 self.niches[selected_niche].add_rated_individual(ind);
@@ -324,6 +351,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
             self.niches[selected_niche].add_rated_individual(ind);
         }
+        */
 
     }
 

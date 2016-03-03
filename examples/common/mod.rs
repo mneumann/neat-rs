@@ -125,7 +125,7 @@ pub fn to_gml<W, T, F>(wr: &mut W, graph: &OwnedGraph<T>, node_color_weight: &F)
     for nidx in 0..graph.num_nodes() {
         let node_type: f32 = node_color_weight(graph.node_value(nidx));
         try!(write!(wr, "  node [id {} weight {:.1}", nidx, node_type));
-        if let Some(node_label) = graph.node_value(nidx).node_label() {
+        if let Some(node_label) = graph.node_value(nidx).node_label(nidx) {
             try!(write!(wr, " label \"{}\"", node_label));
         }
         try!(writeln!(wr, "]"));
@@ -194,10 +194,9 @@ pub fn to_gml_petgraph<W, T, F>(wr: &mut W, graph: &PetGraph<T, f32, Directed>, 
     try!(writeln!(wr, "  directed 1"));
 
     for (nidx, node) in graph.raw_nodes().iter().enumerate() {
-    //for nidx in 0..graph.num_nodes() {
         let node_type: f32 = node_color_weight(&node.weight);
         try!(write!(wr, "  node [id {} weight {:.1}", nidx, node_type));
-        if let Some(node_label) = node.weight.node_label() {
+        if let Some(node_label) = node.weight.node_label(nidx) {
             try!(write!(wr, " label \"{}\"", node_label));
         }
         try!(writeln!(wr, "]"));
@@ -214,10 +213,41 @@ pub fn to_gml_petgraph<W, T, F>(wr: &mut W, graph: &PetGraph<T, f32, Directed>, 
     Ok(())
 }
 
+pub fn write_petgraph_as_dot<T, F>(filename: &str, graph: &PetGraph<T, f32, Directed>, node_color_weight: &F) -> io::Result<()>
+    where T: NodeType + NodeLabel,
+          F: Fn(&T) -> f32
+{
+    let mut file = File::create(filename).unwrap();
+    let mut wr = &mut file;
+    try!(writeln!(wr, "digraph {{"));
+
+    for (nidx, node) in graph.raw_nodes().iter().enumerate() {
+        let node_type: f32 = node_color_weight(&node.weight);
+        try!(write!(wr, "  {} [weight={:.1}", nidx, node_type));
+        try!(write!(wr, ",shape={}", node.weight.node_shape()));
+        if let Some(node_label) = node.weight.node_label(nidx) {
+            try!(write!(wr, ",label=\"{}\"", node_label));
+        }
+        try!(writeln!(wr, "];"));
+    }
+    for edge in graph.raw_edges() {
+        try!(writeln!(wr,
+                      "  {} -> {} [weight={:.2}];",
+                      edge.source().index(),
+                      edge.target().index(),
+                      edge.weight));
+
+    }
+    try!(writeln!(wr, "}}"));
+    Ok(())
+}
 
 pub trait NodeLabel {
-    fn node_label(&self) -> Option<String> {
+    fn node_label(&self, _idx: usize) -> Option<String> {
         None
+    }
+    fn node_shape(&self) -> &'static str {
+        "circle"
     }
 }
 
@@ -229,13 +259,21 @@ pub enum Neuron {
 }
 
 impl NodeLabel for Neuron {
-    fn node_label(&self) -> Option<String> {
+    fn node_label(&self, _idx: usize) -> Option<String> {
         match *self { 
             Neuron::Input => Some("Input".to_owned()),
             Neuron::Hidden => Some("Hidden".to_owned()),
             Neuron::Output => Some("Output".to_owned()),
         }
     }
+    fn node_shape(&self) -> &'static str {
+        match *self { 
+            Neuron::Input => "circle",
+            Neuron::Hidden => "box",
+            Neuron::Output => "doublecircle",
+        }
+    }
+
 }
 
 impl NodeColorWeight for Neuron {
