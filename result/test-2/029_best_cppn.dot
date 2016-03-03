@@ -1,0 +1,25 @@
+digraph {
+  0 [weight=0.0,shape=circle,label="x_s"];
+  1 [weight=0.0,shape=circle,label="y_s"];
+  2 [weight=0.0,shape=circle,label="x_t"];
+  3 [weight=0.0,shape=circle,label="y_t"];
+  4 [weight=0.0,shape=doublecircle,label="Output"];
+  5 [weight=0.0,shape=doublecircle,label="Output"];
+  6 [weight=0.0,shape=box,label="BipolarGaussian"];
+  7 [weight=0.0,shape=box,label="BipolarGaussian"];
+  8 [weight=0.0,shape=box,label="BipolarGaussian"];
+  0 -> 6 [weight=0.47];
+  0 -> 7 [weight=2.11];
+  1 -> 4 [weight=-3.00];
+  1 -> 6 [weight=-2.70];
+  2 -> 6 [weight=1.44];
+  3 -> 5 [weight=-1.87];
+  3 -> 7 [weight=-0.66];
+  6 -> 5 [weight=-1.73];
+  6 -> 7 [weight=1.41];
+  7 -> 5 [weight=1.92];
+  1 -> 5 [weight=-1.82];
+  1 -> 7 [weight=-1.46];
+  2 -> 8 [weight=0.77];
+  6 -> 8 [weight=2.52];
+}
