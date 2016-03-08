@@ -142,12 +142,12 @@ impl FitnessEvaluator {
 
         //substrate.each_link(&mut cppn, LinkMode::AbsolutePositions, &mut |link| {
         substrate.each_link(&mut cppn, LinkMode::RelativePositionOfTarget, &mut |link| {
-            let mut w0 = link.outputs[0];
-            let mut w1 = link.outputs[1];
+            let mut link_weight = link.outputs[0];
+            let mut leo = link.outputs[1]; // link expression output
 
-            //if w1 > 0.0 {
-            if w0 > w1 {
-                let w = w0.abs();
+            if leo > 0.0 {
+            //if w0 > w1 {
+                let w = link_weight.abs();
                //let w = (w0 + 1.0) / 2.0;
             //if w > 0.5 {//cppn_weight_threshold_min && w < cppn_weight_threshold_max {
                 //let normalized = (w - cppn_weight_threshold_min) / (cppn_weight_threshold_max - cppn_weight_threshold_min);
@@ -237,7 +237,7 @@ fn run(run_no: usize, cfg: &config::Configuration) {
         // 2 output (o1, o2)
         let n_output1 = cache.create_node_innovation();
         let n_output2 = cache.create_node_innovation();
-        genome.add_node(n_output1, CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
+        genome.add_node(n_output1, CppnNode::output(GeometricActivationFunction::Gaussian));
         genome.add_node(n_output2, CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
 
         // 1 bias node
@@ -273,7 +273,7 @@ fn run(run_no: usize, cfg: &config::Configuration) {
 
     let es = ES {
         activation_functions: vec![
-            GeometricActivationFunction::Linear,
+            //GeometricActivationFunction::Linear,
             //GeometricActivationFunction::LinearBipolarClipped,
             GeometricActivationFunction::BipolarGaussian,
             //GeometricActivationFunction::Gaussian,
