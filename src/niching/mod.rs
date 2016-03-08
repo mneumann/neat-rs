@@ -124,7 +124,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
                                                  .take(top_n_niches)
                                                  .map(|&(mean_fitness, _)| mean_fitness)
                                                  .sum();
-        println!("total_mean: {:?}", total_mean);
+        //println!("total_mean: {:?}", total_mean);
 
         // Calculate the new size of each niche, which depends on it's mean fitness relative to
         // other niches.
@@ -182,7 +182,7 @@ impl<'a, T, F> NicheRunner<'a, T, F>
 
         let old_niches: Vec<_> = old_niches_sort.into_iter().map(|(_, niche)| niche).collect();
 
-        println!("niche_sizes: {:?}", new_niche_sizes);
+        //println!("niche_sizes: {:?}", new_niche_sizes);
 
         // XXX: we don't have to sort all niches! only `top_n_niches`
         let ranked_old_niches: Vec<_> = old_niches.into_iter()

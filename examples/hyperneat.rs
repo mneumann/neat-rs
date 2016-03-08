@@ -73,8 +73,11 @@ impl NodeLabel for Node {
 fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     let mut substrate = Substrate::new();
 
+    let min = -3.0;
+    let max = 3.0;
+
     // XXX: Todo 3d position
-    let mut y_iter = DistributeInterval::new(3, -1.0, 1.0); // 3 layers (Input, Hidden, Output)
+    let mut y_iter = DistributeInterval::new(3, min, max); // 3 layers (Input, Hidden, Output)
 
     let mut input_layer = Layer::new();
     let mut hidden_layer = Layer::new();
@@ -83,7 +86,7 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     // Input layer
     {
         let y = y_iter.next().unwrap();
-        for x in DistributeInterval::new(node_count.inputs, -1.0, 1.0) {
+        for x in DistributeInterval::new(node_count.inputs, min, max) {
             input_layer.add_node(Position2d::new(x, y), Neuron::Input);
         }
     }
@@ -91,7 +94,7 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     // Hidden
     {
         let y = y_iter.next().unwrap();
-        for x in DistributeInterval::new(node_count.hidden, -1.0, 1.0) {
+        for x in DistributeInterval::new(node_count.hidden, min, max) {
             hidden_layer.add_node(Position2d::new(x, y), Neuron::Hidden);
         }
     }
@@ -99,7 +102,7 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     // Outputs
     {
         let y = y_iter.next().unwrap();
-        for x in DistributeInterval::new(node_count.outputs, -1.0, 1.0) {
+        for x in DistributeInterval::new(node_count.outputs, min, max) {
             output_layer.add_node(Position2d::new(x, y), Neuron::Output);
         }
     }
@@ -109,9 +112,9 @@ fn generate_substrate(node_count: &NodeCount) -> Substrate<Position2d, Neuron> {
     let o = substrate.add_layer(output_layer);
 
     substrate.add_layer_link(i, h, None);
+    substrate.add_layer_link(i, o, None);
     substrate.add_layer_link(h, h, None);
     substrate.add_layer_link(h, o, None);
-    substrate.add_layer_link(i, o, None);
 
     return substrate;
 }
@@ -137,12 +140,15 @@ impl FitnessEvaluator {
             }
         }
 
+        //substrate.each_link(&mut cppn, LinkMode::AbsolutePositions, &mut |link| {
         substrate.each_link(&mut cppn, LinkMode::RelativePositionOfTarget, &mut |link| {
             let mut w0 = link.outputs[0];
             let mut w1 = link.outputs[1];
 
+            //if w1 > 0.0 {
             if w0 > w1 {
                 let w = w0.abs();
+               //let w = (w0 + 1.0) / 2.0;
             //if w > 0.5 {//cppn_weight_threshold_min && w < cppn_weight_threshold_max {
                 //let normalized = (w - cppn_weight_threshold_min) / (cppn_weight_threshold_max - cppn_weight_threshold_min);
                 //if w > 1.0 {
@@ -211,8 +217,8 @@ fn run(run_no: usize, cfg: &config::Configuration) {
 
     // start with minimal random topology.
 
-    let template_genome = {
-        let mut genome = Genome::new();
+    //let template_genome = {
+    let mut genome = Genome::new();
 
         // 4 inputs (x1,y1,x2,y2)
         let n_input1 = cache.create_node_innovation();
@@ -235,18 +241,12 @@ fn run(run_no: usize, cfg: &config::Configuration) {
         genome.add_node(n_output2, CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
 
         // 1 bias node
-        //let n_bias = cache.create_node_innovation();
-        //genome.add_node(n_bias, CppnNode::bias(GeometricActivationFunction::Constant1));
+        let n_bias = cache.create_node_innovation();
+        genome.add_node(n_bias, CppnNode::bias(GeometricActivationFunction::Constant1));
 
-        // connect all input/bias nodes to the output node.
-        /*
-        for &from in &[n_input1, n_input2, n_input3, n_input4] { //, n_distance, n_bias] {
-            genome.add_link(from, n_output, cache.get_or_create_link_innovation(from, n_output), cfg.link_weight_range().random_weight(&mut rng));
-        }
-        */
-
-        genome
-    };
+        //genome
+    //};
+    let template_genome = genome;
 
     let mut niche_runner = NicheRunner::new(&fitness_evaluator);
 
@@ -257,7 +257,15 @@ fn run(run_no: usize, cfg: &config::Configuration) {
         let niche_size = cfg.population_size() / cfg.num_niches(); 
 
         for _ in 0..niche_size {
-            pop.add_unrated_individual(Individual::new_unrated(Box::new(template_genome.clone())));
+            let mut genome = template_genome.clone();
+            // connect all input/bias nodes to the output node randomly
+            /*
+            for &from in &[n_input1, n_input2, n_input3, n_input4] { //, n_distance, n_bias] {
+                genome.add_link(from, n_output1, cache.get_or_create_link_innovation(from, n_output1), cfg.link_weight_range().random_weight(&mut rng));
+                genome.add_link(from, n_output2, cache.get_or_create_link_innovation(from, n_output2), cfg.link_weight_range().random_weight(&mut rng));
+            }
+            */
+            pop.add_unrated_individual(Individual::new_unrated(Box::new(genome.clone())));
         }
 
         niche_runner.add_unrated_population_as_niche(pop);
@@ -265,7 +273,7 @@ fn run(run_no: usize, cfg: &config::Configuration) {
 
     let es = ES {
         activation_functions: vec![
-            //GeometricActivationFunction::Linear,
+            GeometricActivationFunction::Linear,
             //GeometricActivationFunction::LinearBipolarClipped,
             GeometricActivationFunction::BipolarGaussian,
             //GeometricActivationFunction::Gaussian,
@@ -293,14 +301,14 @@ fn run(run_no: usize, cfg: &config::Configuration) {
     let mut fitness_log: Vec<f64> = Vec::new();
 
     while niche_runner.has_next_iteration(cfg.stop_after_iters()) {
-        println!("R{:03} iteration: {}", run_no, niche_runner.current_iteration());
+        println!("R{:05} iteration: {}", run_no, niche_runner.current_iteration());
 
         let best_fitness = niche_runner.best_individual().unwrap().fitness().get();;
-        println!("R{:03} best fitness: {:2}", run_no, best_fitness); 
-        println!("R{:03} num individuals: {}", run_no, niche_runner.num_individuals());
+        println!("R{:05} best fitness: {:2}", run_no, best_fitness); 
+        println!("R{:05} num individuals: {}", run_no, niche_runner.num_individuals());
 
         if best_fitness > cfg.stop_if_fitness_better_than() {
-            println!("R{:03} Premature abort.", run_no);
+            println!("R{:05} Premature abort.", run_no);
             break;
         }
 
@@ -320,19 +328,19 @@ fn run(run_no: usize, cfg: &config::Configuration) {
 
     let best = final_pop.best_individual().unwrap();
 
-    println!("R{:03} best fitness: {:?}", run_no, best.fitness());
+    println!("R{:05} best fitness: {:?}", run_no, best.fitness());
 
     if best.fitness().get() < 0.8 {
-        println!("R{:03} no output", run_no);
+        println!("R{:05} no output", run_no);
         return;
     }
 
     {
-        write_gml(&format!("{:03}_best.gml", run_no), &fitness_evaluator.genome_to_graph(best.genome()), &Neuron::node_color_weight);
+        write_gml(&format!("{:05}_best.gml", run_no), &fitness_evaluator.genome_to_graph(best.genome()), &Neuron::node_color_weight);
 
         // display CPPN
-        write_gml_petgraph(&format!("{:03}_best_cppn.gml", run_no), &genome_to_petgraph(best.genome()), &|_| 0.0);
-        write_petgraph_as_dot(&format!("{:03}_best_cppn.dot", run_no), &genome_to_petgraph(best.genome()), &|_| 0.0);
+        write_gml_petgraph(&format!("{:05}_best_cppn.gml", run_no), &genome_to_petgraph(best.genome()), &|_| 0.0);
+        write_petgraph_as_dot(&format!("{:05}_best_cppn.dot", run_no), &genome_to_petgraph(best.genome()), &|_| 0.0);
     }
 
     /*
@@ -342,7 +350,7 @@ fn run(run_no: usize, cfg: &config::Configuration) {
     }
     */
 
-    write_gml(&format!("{:03}_target.gml", run_no), &fitness_evaluator.sim.target_graph, &Neuron::node_color_weight);
+    write_gml(&format!("{:05}_target.gml", run_no), &fitness_evaluator.sim.target_graph, &Neuron::node_color_weight);
 }
 
 fn main() {
@@ -351,7 +359,9 @@ fn main() {
     let cfg = config::Configuration::from_file();
     println!("{:?}", cfg);
 
-    for i in 0..100 {
+    let mut i = 0;
+    loop {
         run(i, &cfg);
+        i += 1;
     }
 }
