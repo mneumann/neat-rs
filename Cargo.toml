@@ -27,3 +27,4 @@ petgraph = "0.2"
 asexp = "0.3"
 env_logger = "0.3.2"
 criterion-stats = "0.1.0"
+nsga2 = {git = "https://github.com/mneumann/nsga2-rs"}
