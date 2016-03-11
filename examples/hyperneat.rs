@@ -27,7 +27,7 @@ use common::{load_graph, Neuron, convert_neuron_from_str, GraphSimilarity, NodeC
 write_petgraph_as_dot};
 use cppn::cppn::{Cppn, CppnNode, CppnNodeKind};
 use cppn::activation_function::GeometricActivationFunction;
-use cppn::substrate::{Substrate, Layer, LinkMode};
+use cppn::substrate::{Substrate, Layer};
 use cppn::position::Position2d;
 use neat::weight::{Weight, WeightRange};
 use neat::distribute::DistributeInterval;
@@ -140,8 +140,7 @@ impl FitnessEvaluator {
             }
         }
 
-        //substrate.each_link(&mut cppn, LinkMode::AbsolutePositions, &mut |link| {
-        substrate.each_link(&mut cppn, LinkMode::RelativePositionOfTarget, &mut |link| {
+        substrate.each_link(&mut cppn, &mut |link| {
             let mut link_weight = link.outputs[0];
             let mut leo = link.outputs[1]; // link expression output
 
@@ -217,35 +216,34 @@ fn run(run_no: usize, cfg: &config::Configuration) {
 
     // start with minimal random topology.
 
-    //let template_genome = {
     let mut genome = Genome::new();
 
-        // 4 inputs (x1,y1,x2,y2)
-        let n_input1 = cache.create_node_innovation();
-        let n_input2 = cache.create_node_innovation();
-        let n_input3 = cache.create_node_innovation();
-        let n_input4 = cache.create_node_innovation();
-        genome.add_node(n_input1, CppnNode::input(GeometricActivationFunction::Linear));
-        genome.add_node(n_input2, CppnNode::input(GeometricActivationFunction::Linear));
-        genome.add_node(n_input3, CppnNode::input(GeometricActivationFunction::Linear));
-        genome.add_node(n_input4, CppnNode::input(GeometricActivationFunction::Linear));
+    // 4 inputs (x1,y1,x2,y2)
+    let n_input1 = cache.create_node_innovation();
+    let n_input2 = cache.create_node_innovation();
+    let n_input3 = cache.create_node_innovation();
+    let n_input4 = cache.create_node_innovation();
+    genome.add_node(n_input1, CppnNode::input(GeometricActivationFunction::Linear));
+    genome.add_node(n_input2, CppnNode::input(GeometricActivationFunction::Linear));
+    genome.add_node(n_input3, CppnNode::input(GeometricActivationFunction::Linear));
+    genome.add_node(n_input4, CppnNode::input(GeometricActivationFunction::Linear));
 
-        // 1 input for distance from source to target neuron
-        //let n_distance = cache.create_node_innovation();
-        //genome.add_node(n_distance, CppnNode::input(GeometricActivationFunction::Linear));
+    // 2 output (o1, o2)
+    let n_output1 = cache.create_node_innovation();
+    let n_output2 = cache.create_node_innovation();
+    genome.add_node(n_output1, CppnNode::output(GeometricActivationFunction::Gaussian));
+    genome.add_node(n_output2, CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
 
-        // 2 output (o1, o2)
-        let n_output1 = cache.create_node_innovation();
-        let n_output2 = cache.create_node_innovation();
-        genome.add_node(n_output1, CppnNode::output(GeometricActivationFunction::Gaussian));
-        genome.add_node(n_output2, CppnNode::output(GeometricActivationFunction::BipolarSigmoid));
+    // 1 bias node
+    let n_bias = cache.create_node_innovation();
+    genome.add_node(n_bias, CppnNode::bias(GeometricActivationFunction::Constant1));
 
-        // 1 bias node
-        let n_bias = cache.create_node_innovation();
-        genome.add_node(n_bias, CppnNode::bias(GeometricActivationFunction::Constant1));
+    // 1 node for x-distance between source and target neuron
+    let n_distance_x = cache.create_node_innovation();
+    genome.add_node(n_distance_x, CppnNode::hidden(GeometricActivationFunction::BipolarGaussian));
+    let n_distance_y = cache.create_node_innovation();
+    genome.add_node(n_distance_y, CppnNode::hidden(GeometricActivationFunction::BipolarGaussian));
 
-        //genome
-    //};
     let template_genome = genome;
 
     let mut niche_runner = NicheRunner::new(&fitness_evaluator);
@@ -258,6 +256,14 @@ fn run(run_no: usize, cfg: &config::Configuration) {
 
         for _ in 0..niche_size {
             let mut genome = template_genome.clone();
+
+
+            genome.add_link(n_input1, n_distance_x, cache.get_or_create_link_innovation(n_input1, n_distance_x), cfg.link_weight_range().clip_weight(Weight(-3.0)));
+            genome.add_link(n_input3, n_distance_x, cache.get_or_create_link_innovation(n_input3, n_distance_x), cfg.link_weight_range().clip_weight(Weight(3.0)));
+
+            genome.add_link(n_input2, n_distance_y, cache.get_or_create_link_innovation(n_input2, n_distance_y), cfg.link_weight_range().clip_weight(Weight(-3.0)));
+            genome.add_link(n_input4, n_distance_y, cache.get_or_create_link_innovation(n_input4, n_distance_y), cfg.link_weight_range().clip_weight(Weight(3.0)));
+
             // connect all input/bias nodes to the output node randomly
             /*
             for &from in &[n_input1, n_input2, n_input3, n_input4] { //, n_distance, n_bias] {
